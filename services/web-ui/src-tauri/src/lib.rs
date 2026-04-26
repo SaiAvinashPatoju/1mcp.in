@@ -2,7 +2,7 @@ mod db;
 
 use db::{Db, InstalledMcp};
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{Emitter, Manager, State};
 use tauri_plugin_notification::NotificationExt;
 
 struct AppState {
