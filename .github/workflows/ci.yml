@@ -81,4 +81,3 @@ jobs:
         with:
           projectPath: services/web-ui
           args: ${{ matrix.args }}
-          configPath: services/web-ui/src-tauri/tauri.conf.json
