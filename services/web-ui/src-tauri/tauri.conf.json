@@ -9,7 +9,6 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
-    "title": "Mach1 MCP",
     "windows": [
       {
         "title": "Mach1 MCP",
