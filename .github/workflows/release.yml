@@ -72,7 +72,7 @@ jobs:
 
       # ── npm install ─────────────────────────────────
       - name: Install frontend deps
-        run: npm ci
+        run: npm install
         working-directory: services/web-ui
 
       # ── Tauri build + release ────────────────────────
