@@ -1,0 +1,88 @@
+[
+  {
+    "id": "filesystem",
+    "name": "Filesystem",
+    "version": "0.6.2",
+    "description": "Read, write, and search files within allow-listed directories. Official MCP server.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+    "license": "MIT",
+    "tags": ["files", "io", "official"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${ONEMCP_FS_ROOT}"]
+    },
+    "envSchema": [
+      {
+        "name": "ONEMCP_FS_ROOT",
+        "label": "Allowed root directory",
+        "description": "Absolute path the MCP is permitted to read/write.",
+        "required": true
+      }
+    ],
+    "permissions": { "filesystem": { "read": ["${ONEMCP_FS_ROOT}"], "write": ["${ONEMCP_FS_ROOT}"] } }
+  },
+  {
+    "id": "memory",
+    "name": "Knowledge Graph Memory",
+    "version": "0.6.0",
+    "description": "Persistent knowledge graph the agent can query and update across turns.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
+    "license": "MIT",
+    "tags": ["memory", "graph", "official"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"] }
+  },
+  {
+    "id": "fetch",
+    "name": "Fetch",
+    "version": "0.6.0",
+    "description": "Fetch URLs and convert HTML to markdown for agent consumption.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+    "license": "MIT",
+    "tags": ["web", "http", "official"],
+    "transport": "stdio",
+    "runtime": "python",
+    "entrypoint": { "command": "uvx", "args": ["mcp-server-fetch"] },
+    "permissions": { "network": true }
+  },
+  {
+    "id": "git",
+    "name": "Git",
+    "version": "0.6.0",
+    "description": "Read-only git repository inspection (log, diff, blame).",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+    "license": "MIT",
+    "tags": ["git", "vcs", "official"],
+    "transport": "stdio",
+    "runtime": "python",
+    "entrypoint": { "command": "uvx", "args": ["mcp-server-git", "--repository", "${ONEMCP_GIT_REPO}"] },
+    "envSchema": [
+      { "name": "ONEMCP_GIT_REPO", "label": "Repository path", "required": true }
+    ]
+  },
+  {
+    "id": "github",
+    "name": "GitHub",
+    "version": "0.6.2",
+    "description": "Search code, read issues/PRs, and create issues on GitHub via a personal access token.",
+    "homepage": "https://github.com/github/github-mcp-server",
+    "license": "MIT",
+    "tags": ["github", "vcs", "official"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"] },
+    "envSchema": [
+      {
+        "name": "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "label": "GitHub Personal Access Token",
+        "description": "Fine-grained PAT with the scopes you want the agent to have.",
+        "secret": true,
+        "required": true
+      }
+    ],
+    "permissions": { "network": true }
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "mcps": [
+    {
+      "id": "stub",
+      "name": "Stub MCP",
+      "version": "0.1.0",
+      "description": "In-tree no-deps MCP for E2E testing. Exposes a single echo tool.",
+      "transport": "stdio",
+      "runtime": "binary",
+      "entrypoint": {
+        "command": "${STUBMCP_BIN}",
+        "args": []
+      }
+    }
+  ]
+}

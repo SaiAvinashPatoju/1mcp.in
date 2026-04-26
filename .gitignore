@@ -1,0 +1,20 @@
+/bin/
+*.exe
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Tauri / Node (Phase 2+)
+node_modules/
+dist/
+.svelte-kit/
+src-tauri/target/
+
+# Go
+/services/central-mcp/centralmcpd
+/services/central-mcp/centralmcpd.exe
+
+# OS
+.DS_Store
+Thumbs.db

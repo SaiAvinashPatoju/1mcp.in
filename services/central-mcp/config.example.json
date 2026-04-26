@@ -1,0 +1,16 @@
+{
+  "mcps": [
+    {
+      "id": "memory",
+      "name": "Knowledge Graph Memory",
+      "version": "0.6.0",
+      "description": "Persistent knowledge graph the agent can query and update across turns.",
+      "transport": "stdio",
+      "runtime": "node",
+      "entrypoint": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-memory"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "mcpId": "stub",
+    "tool": "echo",
+    "args": { "hello": "world" },
+    "allowOK": ["hello", "world"]
+  }
+]

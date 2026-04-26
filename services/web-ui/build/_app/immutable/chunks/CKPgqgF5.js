@@ -1,0 +1,1 @@
+function u(t){return function(...e){var r=e[0];r.target===this&&(t==null||t.apply(this,e))}}function i(t){return function(...e){var r=e[0];return r.preventDefault(),t==null?void 0:t.apply(this,e)}}export{i as p,u as s};
