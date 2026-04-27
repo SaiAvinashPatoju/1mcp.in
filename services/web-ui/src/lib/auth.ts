@@ -1,15 +1,27 @@
+import { browser } from '$app/environment';
 import { writable, derived } from 'svelte/store';
 import type { User } from './types';
 
 // Set VITE_API_URL in your .env to point at the deployed mcpapiserver.
 // Falls back to localhost for local development.
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
+const isTauri = browser && '__TAURI_INTERNALS__' in window;
+
+type AuthResult = {
+	token: string;
+	user: User;
+};
 
 export const user = writable<User | null>(null);
 export const authLoading = writable(false);
 export const rememberMe = writable(true);
 
 export const isAuthenticated = derived(user, ($u) => $u !== null);
+
+async function invokeDesktop<T>(command: string, args: Record<string, unknown>): Promise<T> {
+	const { invoke } = await import('@tauri-apps/api/core');
+	return invoke<T>(command, args);
+}
 
 function getStorage(): Storage | null {
 	if (typeof localStorage === 'undefined') return null;
@@ -44,6 +56,12 @@ export async function restoreSession(): Promise<void> {
 	const token = getToken();
 	if (!token) return;
 	try {
+		if (isTauri) {
+			const currentUser = await invokeDesktop<User>('auth_me', { token });
+			user.set(currentUser);
+			return;
+		}
+
 		const res = await fetch(`${API_URL}/api/auth/me`, {
 			headers: { Authorization: `Bearer ${token}` }
 		});
@@ -61,6 +79,13 @@ export async function restoreSession(): Promise<void> {
 export async function signIn(email: string, password: string, remember = true): Promise<void> {
 	authLoading.set(true);
 	try {
+		if (isTauri) {
+			const data = await invokeDesktop<AuthResult>('auth_login', { email, password });
+			setToken(data.token, remember);
+			user.set({ id: data.user.id, name: data.user.name, email: data.user.email });
+			return;
+		}
+
 		const res = await fetch(`${API_URL}/api/auth/login`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -91,6 +116,13 @@ export async function signIn(email: string, password: string, remember = true): 
 export async function signUp(name: string, email: string, password: string): Promise<void> {
 	authLoading.set(true);
 	try {
+		if (isTauri) {
+			const data = await invokeDesktop<AuthResult>('auth_register', { name, email, password });
+			setToken(data.token, true);
+			user.set({ id: data.user.id, name: data.user.name, email: data.user.email });
+			return;
+		}
+
 		const res = await fetch(`${API_URL}/api/auth/register`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },

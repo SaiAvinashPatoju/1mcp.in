@@ -1,5 +1,25 @@
+import { browser } from '$app/environment';
 import { writable, derived, get } from 'svelte/store';
 import type { InstalledMcp, MarketplaceMcp, ClientApp } from './types';
+
+const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
+const isTauri = browser && '__TAURI_INTERNALS__' in window;
+
+type CloudMarketplaceItem = {
+	id: string;
+	name: string;
+	description: string;
+	version: string;
+	runtime: string;
+	tags: string[];
+	homepage: string;
+	license: string;
+};
+
+async function invokeDesktop<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
+	const { invoke } = await import('@tauri-apps/api/core');
+	return invoke<T>(command, args);
+}
 
 // ─── Installed MCPs ─────────────────────────────────────
 export const installed = writable<InstalledMcp[]>([
@@ -184,7 +204,11 @@ export async function startUserCounter() {
 
 async function fetchUserCount() {
 	try {
-		const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
+		if (isTauri) {
+			userCount.set(await invokeDesktop<number>('fetch_cloud_stats'));
+			return;
+		}
+
 		const res = await fetch(`${API_URL}/api/stats`);
 		if (res.ok) {
 			const data = await res.json();
@@ -210,15 +234,17 @@ export function stopUserCounter() {
  */
 export async function fetchMarketplace() {
 	try {
-		const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
-		const res = await fetch(`${API_URL}/api/marketplace`);
-		if (!res.ok) return;
+		let apiItems: CloudMarketplaceItem[] = [];
 
-		const data = await res.json();
-		const apiItems: Array<{
-			id: string; name: string; description: string; version: string;
-			runtime: string; tags: string[]; homepage: string; license: string;
-		}> = data.items ?? [];
+		if (isTauri) {
+			apiItems = await invokeDesktop<CloudMarketplaceItem[]>('fetch_cloud_marketplace');
+		} else {
+			const res = await fetch(`${API_URL}/api/marketplace`);
+			if (!res.ok) return;
+
+			const data = await res.json();
+			apiItems = data.items ?? [];
+		}
 
 		if (apiItems.length === 0) return;
 

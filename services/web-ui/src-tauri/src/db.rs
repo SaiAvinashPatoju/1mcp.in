@@ -25,13 +25,6 @@ pub struct MarketplaceItem {
     pub license: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UserStats {
-    pub total_users: u64,
-    pub mcps_installed: u64,
-    pub active_connections: u64,
-}
-
 pub struct Db {
     conn: Connection,
 }

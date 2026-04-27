@@ -1,12 +1,181 @@
 mod db;
 
 use db::{Db, InstalledMcp, MarketplaceItem};
+use reqwest::Response;
+use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
+use std::time::Duration;
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_notification::NotificationExt;
 
 struct AppState {
     db: Mutex<Db>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct AuthUser {
+    id: String,
+    name: String,
+    email: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct AuthResponse {
+    token: String,
+    user: AuthUser,
+}
+
+#[derive(Debug, Deserialize)]
+struct ErrorResponse {
+    error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionResponse {
+    user: AuthUser,
+}
+
+#[derive(Debug, Deserialize)]
+struct StatsResponse {
+    total_users: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct MarketplaceResponse {
+    items: Vec<MarketplaceItem>,
+}
+
+fn cloud_api_url() -> &'static str {
+    option_env!("ONEMCP_API_URL").unwrap_or(if cfg!(debug_assertions) {
+        "http://localhost:8080"
+    } else {
+        "https://mcpapiserver-production.up.railway.app"
+    })
+}
+
+fn cloud_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|e| format!("HTTP client init failed: {e}"))
+}
+
+async fn decode_api_error(response: Response, fallback: &str) -> String {
+    let status = response.status();
+    match response.json::<ErrorResponse>().await {
+        Ok(body) => body
+            .error
+            .unwrap_or_else(|| format!("HTTP {}: {fallback}", status.as_u16())),
+        Err(_) => format!("HTTP {}: {fallback}", status.as_u16()),
+    }
+}
+
+#[tauri::command]
+async fn auth_login(email: String, password: String) -> Result<AuthResponse, String> {
+    let client = cloud_client()?;
+    let response = client
+        .post(format!("{}/api/auth/login", cloud_api_url()))
+        .json(&serde_json::json!({
+            "email": email,
+            "password": password,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(decode_api_error(response, "Login failed").await);
+    }
+
+    response
+        .json::<AuthResponse>()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+async fn auth_register(name: String, email: String, password: String) -> Result<AuthResponse, String> {
+    let client = cloud_client()?;
+    let response = client
+        .post(format!("{}/api/auth/register", cloud_api_url()))
+        .json(&serde_json::json!({
+            "name": name,
+            "email": email,
+            "password": password,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(decode_api_error(response, "Registration failed").await);
+    }
+
+    response
+        .json::<AuthResponse>()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+async fn auth_me(token: String) -> Result<AuthUser, String> {
+    let client = cloud_client()?;
+    let response = client
+        .get(format!("{}/api/auth/me", cloud_api_url()))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(decode_api_error(response, "Session restore failed").await);
+    }
+
+    response
+        .json::<SessionResponse>()
+        .await
+        .map(|data| data.user)
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+async fn fetch_cloud_stats() -> Result<u64, String> {
+    let client = cloud_client()?;
+    let response = client
+        .get(format!("{}/api/stats", cloud_api_url()))
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(decode_api_error(response, "Stats request failed").await);
+    }
+
+    response
+        .json::<StatsResponse>()
+        .await
+        .map(|data| data.total_users)
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+async fn fetch_cloud_marketplace() -> Result<Vec<MarketplaceItem>, String> {
+    let client = cloud_client()?;
+    let response = client
+        .get(format!("{}/api/marketplace", cloud_api_url()))
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(decode_api_error(response, "Marketplace request failed").await);
+    }
+
+    response
+        .json::<MarketplaceResponse>()
+        .await
+        .map(|data| data.items)
+        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 // ──────────────────────────────────────────────
@@ -179,6 +348,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            auth_login,
+            auth_register,
+            auth_me,
+            fetch_cloud_stats,
+            fetch_cloud_marketplace,
             list_installed,
             install_mcp,
             uninstall_mcp,
@@ -199,7 +373,6 @@ pub fn run() {
 #[tauri::command]
 fn patch_client_config(app: tauri::AppHandle, client_id: String) -> Result<String, String> {
     use std::fs;
-    use std::path::PathBuf;
     use tauri::Manager;
 
     let config_dir = app.path().config_dir().map_err(|_| "Failed to resolve config directory".to_string())?;
