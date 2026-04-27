@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "vite dev",
     "prepare:router": "node ./scripts/prepare-router.mjs",
-    "build": "npm run prepare:router && vite build",
+    "build": "svelte-kit sync && npm run prepare:router && vite build",
     "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "tauri": "tauri"
   },
   "dependencies": {

@@ -25,7 +25,9 @@ function buildRouter(targetPath) {
   );
 }
 
-if (fs.existsSync(sourcePath)) {
+if (fs.existsSync(destPath)) {
+  console.log(`Using existing bundled router: ${destPath}`);
+} else if (fs.existsSync(sourcePath)) {
   fs.copyFileSync(sourcePath, destPath);
   console.log(`Prepared bundled router: ${destPath}`);
 } else {
