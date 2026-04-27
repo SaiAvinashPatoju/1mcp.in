@@ -9,7 +9,8 @@
 node_modules/
 dist/
 .svelte-kit/
-src-tauri/target/
+**/src-tauri/target/
+**/src-tauri/gen/
 
 # Go
 /services/central-mcp/centralmcpd
