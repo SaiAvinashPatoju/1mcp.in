@@ -134,3 +134,55 @@ OneMcp/
 | MCP spec churn | Pin to dated spec rev; isolate protocol layer behind `internal/router/proto`. |
 | ONNX binary size bloats hub | Ship embedder inside `centralmcpd` (Go), not Tauri; lazy-load model. |
 | stdio multiplexing deadlocks | Per-child writer goroutine + bounded channel; fuzz test. |
+
+---
+
+## Enterprise-Grade Improvements (Pre-Launch Audit)
+
+> Notes from architecture review — 2026-04-27. These must be addressed before any public or enterprise launch.
+
+### Security
+- [ ] **CORS lockdown**: Replace `Access-Control-Allow-Origin: *` with an allowlist of known origins (Railway domain, `tauri://localhost`, `http://localhost:*`). Current wildcard allows any site to call the API.
+- [ ] **Rate limiting**: Add per-IP rate limits on `/api/auth/login` and `/api/auth/register` to prevent brute-force attacks. Use a token bucket or sliding window (e.g. 10 req/min for login).
+- [ ] **CSRF protection**: Add CSRF tokens for state-changing requests or switch to `SameSite=Strict` cookies.
+- [ ] **Token rotation**: Implement refresh tokens. Current 30-day bearer tokens are long-lived and non-revocable after issuance.
+- [ ] **Input sanitization**: Validate email format server-side (regex or net/mail parse). Currently accepts any string as email.
+- [ ] **Password policy**: Enforce complexity beyond 8-char minimum (at least 1 uppercase, 1 number, or use zxcvbn scoring).
+- [ ] **Audit logging**: Log all auth events (login, register, failed login) to a separate audit table with IP + user-agent.
+
+### Scalability & Reliability
+- [ ] **Connection pooling**: pgxpool is configured with defaults. Set explicit `MaxConns`, `MinConns`, `MaxConnLifetime`, and `HealthCheckPeriod` for production loads.
+- [ ] **Graceful shutdown**: `mcpapiserver` has no signal handler — `SIGTERM` kills in-flight requests. Add `context.WithCancel` + `server.Shutdown(ctx)`.
+- [ ] **Health check depth**: `/health` returns static OK. Add DB ping and upstream dependency checks for real liveness/readiness probes.
+- [ ] **Horizontal scaling**: `centralmcpd` is single-process stdio. For multi-user cloud scenarios, add an SSE/WebSocket transport adapter.
+- [ ] **Session cleanup**: Expired sessions accumulate forever. Add a periodic job or DB trigger to purge `user_sessions WHERE expires_at < now()`.
+
+### Observability
+- [ ] **Structured logging**: `mcpapiserver` uses `slog` but has no request-level middleware. Add HTTP middleware that logs method, path, status, latency, and request ID.
+- [ ] **Metrics**: Export Prometheus metrics (request count, latency histogram, active connections, DB pool stats).
+- [ ] **Distributed tracing**: Add OpenTelemetry spans for API → DB calls. Essential for debugging in production.
+- [ ] **Error reporting**: Integrate Sentry or equivalent for unhandled panics and error aggregation.
+
+### Frontend / UX
+- [ ] **Real console integration**: Console currently only shows logs when Tauri events are available. Add a WebSocket or SSE endpoint in `mcpapiserver` that streams router logs to the web UI.
+- [ ] **Offline mode**: The web UI silently fails when the API is unreachable. Show a clear offline banner and use Tauri local SQLite as fallback for all views.
+- [ ] **Loading states**: Dashboard fetches user count but shows 0 during load. Add skeleton loaders for all async data.
+- [ ] **Error boundaries**: No global error boundary in SvelteKit. Add `+error.svelte` pages and an `handleError` hook.
+- [ ] **Accessibility**: Add ARIA labels, keyboard navigation for modals, and focus trapping. Currently no a11y testing.
+
+### Data Integrity
+- [ ] **DB migrations**: Schema is applied via `CREATE IF NOT EXISTS` at startup. This won't handle column additions or type changes. Adopt a migration tool (golang-migrate, atlas, or goose).
+- [ ] **Backup strategy**: No automated backups configured for Railway Postgres. Enable point-in-time recovery.
+- [ ] **Data validation**: Marketplace items have no validation on publish. Add schema validation and content moderation.
+
+### CI/CD & Testing
+- [ ] **Integration tests**: No test coverage for `mcpapiserver` HTTP handlers or `clouddb` methods. Add table-driven Go tests with testcontainers/pgx mock.
+- [ ] **Frontend tests**: Zero test files in `services/web-ui`. Add Playwright E2E tests for login flow, dashboard, and client setup.
+- [ ] **Build pipeline**: No CI config. Add GitHub Actions for: lint, test, build binaries, build Tauri app, run E2E.
+- [ ] **Release automation**: No versioning strategy. Adopt semver, changelog generation, and signed releases.
+
+### MCP Router Improvements
+- [ ] **Concurrent warmup timeout**: All MCPs warm up in parallel with a shared 15s timeout. If one MCP hangs, it doesn't block others (good), but there's no per-MCP circuit breaker to prevent retrying a permanently broken MCP.
+- [ ] **Tool deduplication**: If two MCPs expose the same tool name, namespacing handles it (`github__search`, `memory__search`), but there's no conflict detection or user notification.
+- [ ] **Resource limits**: No memory/CPU limits on child processes in the process driver. A runaway MCP can consume all system resources.
+- [ ] **Streaming support**: The router buffers entire responses. For large tool outputs, add streaming pass-through.

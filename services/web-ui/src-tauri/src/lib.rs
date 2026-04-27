@@ -1,6 +1,6 @@
 mod db;
 
-use db::{Db, InstalledMcp};
+use db::{Db, InstalledMcp, MarketplaceItem};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_notification::NotificationExt;
@@ -79,12 +79,12 @@ async fn run_update_check(app: tauri::AppHandle) {
         Ok(Some(update)) => {
             let version = update.version.clone();
 
-            // OS notification
+            // OS notification — update available
             let _ = app
                 .notification()
                 .builder()
-                .title("Mach1 Update Available")
-                .body(format!("Version {} is downloading…", version))
+                .title("1mcp.in Update Available")
+                .body(format!("Version {} is downloading in the background…", version))
                 .show();
 
             // Tell the UI a download is starting
@@ -97,8 +97,8 @@ async fn run_update_check(app: tauri::AppHandle) {
                     let _ = app
                         .notification()
                         .builder()
-                        .title("Mach1 Ready to Restart")
-                        .body(format!("Version {} downloaded. Click Restart to apply.", version))
+                        .title("1mcp.in Ready to Restart")
+                        .body(format!("v{} is installed. Click Restart in the app to apply.", version))
                         .show();
 
                     // Tell the UI to show the "Restart" banner
@@ -125,6 +125,21 @@ fn restart_app(app: tauri::AppHandle) {
 }
 
 // ──────────────────────────────────────────────
+// Marketplace commands
+// ──────────────────────────────────────────────
+
+#[tauri::command]
+fn list_marketplace(state: State<AppState>) -> Result<Vec<MarketplaceItem>, String> {
+    state.db.lock().map_err(|e| e.to_string())?.list_marketplace()
+}
+
+/// Sync a batch of marketplace items received from the cloud API into local SQLite.
+#[tauri::command]
+fn sync_marketplace(state: State<AppState>, items: Vec<MarketplaceItem>) -> Result<(), String> {
+    state.db.lock().map_err(|e| e.to_string())?.sync_marketplace(&items)
+}
+
+// ──────────────────────────────────────────────
 // App bootstrap
 // ──────────────────────────────────────────────
 
@@ -147,11 +162,18 @@ pub fn run() {
             let db = Db::open(&data_dir).expect("failed to open database");
             app.manage(AppState { db: Mutex::new(db) });
 
-            // Check for updates ~5 s after startup (non-blocking)
+            // Check for updates ~5 s after startup, then every 4 hours
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                run_update_check(handle).await;
+                run_update_check(handle.clone()).await;
+
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(4 * 60 * 60));
+                interval.tick().await; // consume the first immediate tick
+                loop {
+                    interval.tick().await;
+                    run_update_check(handle.clone()).await;
+                }
             });
 
             Ok(())
@@ -166,7 +188,113 @@ pub fn run() {
             increment_user_count,
             check_update,
             restart_app,
+            patch_client_config,
+            list_marketplace,
+            sync_marketplace,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+fn patch_client_config(app: tauri::AppHandle, client_id: String) -> Result<String, String> {
+    use std::fs;
+    use std::path::PathBuf;
+    use tauri::Manager;
+
+    let config_dir = app.path().config_dir().map_err(|_| "Failed to resolve config directory".to_string())?;
+    let home_dir = app.path().home_dir().map_err(|_| "Failed to resolve home directory".to_string())?;
+    
+    // Resolve the correct config file for each client
+    // See https://modelcontextprotocol.io/quickstart/user for official paths
+    let (path, key_name) = match client_id.as_str() {
+        "vscode" => {
+            // VS Code uses %APPDATA%/Code/User/settings.json (mcp.servers) or .vscode/mcp.json
+            // For global setup, we write to the user-level mcp settings
+            (config_dir.join("Code").join("User").join("settings.json"), "mcp.servers")
+        },
+        "cursor" => {
+            // Cursor: ~/.cursor/mcp.json
+            (home_dir.join(".cursor").join("mcp.json"), "mcpServers")
+        },
+        "claude" => {
+            // Claude Desktop: %APPDATA%/Claude/claude_desktop_config.json
+            (config_dir.join("Claude").join("claude_desktop_config.json"), "mcpServers")
+        },
+        "claudecode" => {
+            // Claude Code: ~/.claude.json
+            (home_dir.join(".claude.json"), "mcpServers")
+        },
+        "windsurf" | "codex" => {
+            // Windsurf/Codex: ~/.codeium/windsurf/mcp_config.json or similar
+            // Codex: ~/.codex/mcp.json
+            let p = if client_id == "codex" {
+                home_dir.join(".codex").join("mcp.json")
+            } else {
+                home_dir.join(".codeium").join("windsurf").join("mcp_config.json")
+            };
+            (p, "mcpServers")
+        },
+        _ => return Err(format!("Automated setup for '{}' is not yet supported. Please add the 1mcp server config manually.", client_id)),
+    };
+
+    if !path.exists() {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap_or_default();
+        }
+        if key_name == "mcp.servers" {
+            fs::write(&path, "{}").unwrap_or_default();
+        } else {
+            fs::write(&path, "{\"mcpServers\": {}}").unwrap_or_default();
+        }
+    }
+
+    let content = fs::read_to_string(&path).unwrap_or_else(|_| "{}".to_string());
+    let mut json: serde_json::Value = serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+
+    // Resolve centralmcpd binary path
+    let data_dir = app.path().app_data_dir().map_err(|_| "Failed to resolve app data dir".to_string())?;
+    let db_path = data_dir.join("1mcp.db");
+
+    let current_dir = std::env::current_dir().unwrap_or_default();
+    let bin_path = current_dir.join("../../bin/centralmcpd.exe");
+    let bin_str = if bin_path.exists() {
+        bin_path.to_string_lossy().to_string()
+    } else {
+        "centralmcpd".to_string()
+    };
+
+    let mcp_entry = serde_json::json!({
+        "command": bin_str,
+        "args": ["--db", db_path.to_string_lossy().to_string()]
+    });
+
+    if key_name == "mcp.servers" {
+        // VS Code settings.json uses "mcp.servers" as a top-level key
+        // Format: { "mcp.servers": { "1mcp": { "command": ..., "args": [...] } } }
+        if let Some(obj) = json.as_object_mut() {
+            if let Some(servers) = obj.get_mut("mcp.servers").and_then(|s| s.as_object_mut()) {
+                servers.insert("1mcp".to_string(), mcp_entry);
+            } else {
+                let mut servers = serde_json::Map::new();
+                servers.insert("1mcp".to_string(), mcp_entry);
+                obj.insert("mcp.servers".to_string(), serde_json::Value::Object(servers));
+            }
+        }
+    } else {
+        // mcpServers format for Claude, Cursor, etc.
+        if let Some(obj) = json.as_object_mut() {
+            if let Some(servers) = obj.get_mut("mcpServers").and_then(|s| s.as_object_mut()) {
+                servers.insert("1mcp".to_string(), mcp_entry);
+            } else {
+                let mut servers = serde_json::Map::new();
+                servers.insert("1mcp".to_string(), mcp_entry);
+                obj.insert("mcpServers".to_string(), serde_json::Value::Object(servers));
+            }
+        }
+    }
+
+    fs::write(&path, serde_json::to_string_pretty(&json).unwrap_or_default()).map_err(|e| e.to_string())?;
+
+    Ok(path.to_string_lossy().to_string())
 }

@@ -19,6 +19,15 @@ if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
 
 Push-Location $serviceDir
 try {
+    # Keep data/registry-index.json in sync with packages/registry-index/index.json
+    $registrySrc  = Join-Path $repoRoot "packages\registry-index\index.json"
+    $registryDest = Join-Path $serviceDir "cmd\mcpapiserver\data\registry-index.json"
+    if (Test-Path $registrySrc) {
+        New-Item -ItemType Directory -Force -Path (Split-Path $registryDest) | Out-Null
+        Copy-Item -Path $registrySrc -Destination $registryDest -Force
+        Write-Host "Synced registry-index -> $registryDest"
+    }
+
     Write-Host "go mod tidy"
     go mod tidy
     if ($LASTEXITCODE -ne 0) { throw "go mod tidy failed" }

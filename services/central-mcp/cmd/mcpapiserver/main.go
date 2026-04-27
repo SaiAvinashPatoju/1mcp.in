@@ -9,15 +9,17 @@
 //
 // Endpoints:
 //
-//	GET  /health                 liveness probe
-//	GET  /api/stats              { total_users: N }
-//	POST /api/auth/register      { name, email, password } → { token, user }
-//	POST /api/auth/login         { email, password }       → { token, user }
-//	GET  /api/auth/me            Authorization: Bearer <token> → { user }
+//	GET  /health                  liveness probe
+//	GET  /api/stats               { total_users: N }
+//	GET  /api/marketplace         list all marketplace MCPs
+//	POST /api/auth/register       { name, email, password } → { token, user }
+//	POST /api/auth/login          { email, password }       → { token, user }
+//	GET  /api/auth/me             Authorization: Bearer <token> → { user }
 package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -29,6 +31,9 @@ import (
 
 	"github.com/onemcp/central-mcp/internal/clouddb"
 )
+
+//go:embed data/registry-index.json
+var registryIndexJSON []byte
 
 func main() {
 	dsn := os.Getenv("DATABASE_PUBLIC_URL")
@@ -58,9 +63,15 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("GET /api/stats", handleStats(db))
+	mux.HandleFunc("GET /api/marketplace", handleMarketplace(db))
 	mux.HandleFunc("POST /api/auth/register", handleRegister(db))
 	mux.HandleFunc("POST /api/auth/login", handleLogin(db))
 	mux.HandleFunc("GET /api/auth/me", handleMe(db))
+
+	// Seed marketplace from embedded registry-index on startup
+	if err := seedMarketplace(ctx, db); err != nil {
+		slog.Warn("marketplace seed failed (non-fatal)", "err", err)
+	}
 
 	srv := &http.Server{
 		Addr:         ":" + port,
@@ -107,9 +118,7 @@ func handleStats(db *clouddb.DB) http.HandlerFunc {
 			writeJSON(w, http.StatusInternalServerError, errBody("internal error"))
 			return
 		}
-		// Add a display base of 1000 so the counter never shows embarrassingly
-		// low numbers during early growth.
-		writeJSON(w, http.StatusOK, map[string]any{"total_users": n + 1000})
+		writeJSON(w, http.StatusOK, map[string]any{"total_users": n})
 	}
 }
 
@@ -231,3 +240,26 @@ func handleMe(db *clouddb.DB) http.HandlerFunc {
 }
 
 func errBody(msg string) map[string]string { return map[string]string{"error": msg} }
+
+// ── /api/marketplace ─────────────────────────────────────────────────────────
+
+func handleMarketplace(db *clouddb.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		items, err := db.GetMarketplaceItems(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, errBody("internal error"))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	}
+}
+
+// seedMarketplace upserts the embedded registry-index into the DB so the
+// cloud marketplace is always in sync with the static catalog.
+func seedMarketplace(ctx context.Context, db *clouddb.DB) error {
+	var items []clouddb.MarketplaceItem
+	if err := json.Unmarshal(registryIndexJSON, &items); err != nil {
+		return err
+	}
+	return db.UpsertMarketplaceItems(ctx, items)
+}

@@ -1,32 +1,62 @@
-name: Release Mach1
+name: Release 1mcp.in
 
 on:
   push:
     tags:
-      - 'v*'          # triggers on v0.1.1, v1.2.3, etc.
+      - 'v*'
 
 permissions:
-  contents: write     # needed to create GitHub Releases
+  contents: write
 
 jobs:
-  build:
+  # ── Go tests must pass before releasing ─────────────
+  go-test:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: services/central-mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/central-mcp/go.mod
+          cache-dependency-path: services/central-mcp/go.sum
+      - name: Sync registry-index into Go embed dir
+        run: |
+          mkdir -p cmd/mcpapiserver/data
+          cp ../../packages/registry-index/index.json cmd/mcpapiserver/data/registry-index.json
+      - run: go test -race -timeout 60s ./...
+
+  # ── Deploy mcpapiserver to Railway ──────────────────
+  deploy-api:
+    needs: go-test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+      - name: Deploy mcpapiserver
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service mcpapiserver --detach
+        continue-on-error: true   # don't block desktop release if Railway deploy fails
+
+  # ── Tauri desktop release (all platforms) ───────────
+  tauri-release:
+    needs: go-test
     strategy:
       fail-fast: false
       matrix:
         include:
-          # ── Windows ──────────────────────────────────
           - platform: windows-latest
             rust_target: x86_64-pc-windows-msvc
             args: --target x86_64-pc-windows-msvc
-          # ── macOS Intel ───────────────────────────────
           - platform: macos-latest
             rust_target: x86_64-apple-darwin
             args: --target x86_64-apple-darwin
-          # ── macOS Apple Silicon ───────────────────────
           - platform: macos-latest
             rust_target: aarch64-apple-darwin
             args: --target aarch64-apple-darwin
-          # ── Ubuntu / Debian ───────────────────────────
           - platform: ubuntu-22.04
             rust_target: x86_64-unknown-linux-gnu
             args: --target x86_64-unknown-linux-gnu
@@ -34,10 +64,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-      # ── Checkout ────────────────────────────────────
       - uses: actions/checkout@v4
 
-      # ── Rust toolchain ──────────────────────────────
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -48,7 +76,6 @@ jobs:
         with:
           workspaces: services/web-ui/src-tauri
 
-      # ── Node.js ─────────────────────────────────────
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
@@ -56,7 +83,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: services/web-ui/package-lock.json
 
-      # ── Linux system deps ───────────────────────────
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -70,12 +96,10 @@ jobs:
             libssl-dev \
             pkg-config
 
-      # ── npm install ─────────────────────────────────
       - name: Install frontend deps
         run: npm install
         working-directory: services/web-ui
 
-      # ── Tauri build + release ────────────────────────
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0
         env:
@@ -85,10 +109,13 @@ jobs:
         with:
           projectPath: services/web-ui
           tagName: ${{ github.ref_name }}
-          releaseName: 'Mach1 MCP ${{ github.ref_name }}'
+          releaseName: '1mcp.in ${{ github.ref_name }}'
           releaseBody: |
             ## What's new
             See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+
+            ### Auto-update
+            Open 1mcp.in — the app checks for updates on launch and in the background every 4 hours.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

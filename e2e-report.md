@@ -1,13 +1,13 @@
 # OneMCP E2E Report
 
-_started 2026-04-26T18:06:24+05:30_
+_started 2026-04-27T11:29:12+05:30_
 
 ## Handshake
 
 | Step | OK | Latency | Error |
 |---|---|---|---|
-| initialize | true | 306ms |  |
-| tools/list | true | 0s |  |
+| initialize | true | 741ms |  |
+| tools/list | true | 1ms |  |
 
 ## MCPs (1 tools across 1 MCPs)
 
@@ -19,4 +19,4 @@ _started 2026-04-26T18:06:24+05:30_
 
 | MCP | Tool | OK | Latency | Error |
 |---|---|---|---|---|
-| stub | echo | true | 1ms |  |
+| stub | echo | true | 0s |  |

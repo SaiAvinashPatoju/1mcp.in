@@ -1,7 +1,7 @@
 {
-  "productName": "Mach1 MCP",
-  "version": "0.1.2",
-  "identifier": "com.mach1.mcp",
+  "productName": "1mcp.in",
+  "version": "0.2.1",
+  "identifier": "in.onemcp.hub",
   "build": {
     "frontendDist": "../build",
     "devUrl": "http://localhost:1420",
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "Mach1 MCP",
+        "title": "1mcp.in",
         "width": 1100,
         "height": 720,
         "resizable": true,

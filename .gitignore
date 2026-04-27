@@ -11,6 +11,7 @@ dist/
 .svelte-kit/
 **/src-tauri/target/
 **/src-tauri/gen/
+services/web-ui/build/
 
 # Go
 /services/central-mcp/centralmcpd

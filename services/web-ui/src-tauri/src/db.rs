@@ -13,6 +13,18 @@ pub struct InstalledMcp {
     pub description: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MarketplaceItem {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub version: String,
+    pub runtime: String,
+    pub tags: Vec<String>,
+    pub homepage: String,
+    pub license: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserStats {
     pub total_users: u64,
@@ -27,7 +39,7 @@ pub struct Db {
 impl Db {
     pub fn open(data_dir: &PathBuf) -> Result<Self, String> {
         std::fs::create_dir_all(data_dir).map_err(|e| e.to_string())?;
-        let path = data_dir.join("mach1.db");
+        let path = data_dir.join("1mcp.db");
         let conn = Connection::open(&path).map_err(|e| e.to_string())?;
 
         conn.execute_batch(
@@ -46,6 +58,17 @@ impl Db {
                 value TEXT NOT NULL,
                 PRIMARY KEY (mcp_id, key),
                 FOREIGN KEY (mcp_id) REFERENCES installed_mcps(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS marketplace_items (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                version TEXT NOT NULL DEFAULT '0.0.1',
+                runtime TEXT NOT NULL DEFAULT 'node',
+                tags TEXT NOT NULL DEFAULT '[]',
+                homepage TEXT NOT NULL DEFAULT '',
+                license TEXT NOT NULL DEFAULT 'MIT',
+                synced_at DATETIME NOT NULL DEFAULT (datetime('now'))
             );
             CREATE TABLE IF NOT EXISTS user_counter (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -115,6 +138,48 @@ impl Db {
             params![mcp_id, key, value],
         ).map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    /// Upsert marketplace items received from the cloud API into local cache.
+    pub fn sync_marketplace(&self, items: &[MarketplaceItem]) -> Result<(), String> {
+        for item in items {
+            let tags_json = serde_json::to_string(&item.tags).unwrap_or_else(|_| "[]".to_string());
+            self.conn.execute(
+                "INSERT INTO marketplace_items (id, name, description, version, runtime, tags, homepage, license, synced_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))
+                 ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name, description=excluded.description,
+                    version=excluded.version, runtime=excluded.runtime,
+                    tags=excluded.tags, homepage=excluded.homepage,
+                    license=excluded.license, synced_at=datetime('now')",
+                params![item.id, item.name, item.description, item.version, item.runtime, tags_json, item.homepage, item.license],
+            ).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    /// List all cached marketplace items.
+    pub fn list_marketplace(&self) -> Result<Vec<MarketplaceItem>, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, description, version, runtime, tags, homepage, license FROM marketplace_items ORDER BY name"
+        ).map_err(|e| e.to_string())?;
+
+        let rows = stmt.query_map([], |row| {
+            let tags_json: String = row.get(5)?;
+            let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+            Ok(MarketplaceItem {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                version: row.get(3)?,
+                runtime: row.get(4)?,
+                tags,
+                homepage: row.get(6)?,
+                license: row.get(7)?,
+            })
+        }).map_err(|e| e.to_string())?;
+
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
     }
 
     pub fn get_user_count(&self) -> Result<u64, String> {

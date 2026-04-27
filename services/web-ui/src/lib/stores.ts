@@ -4,12 +4,12 @@ import type { InstalledMcp, MarketplaceMcp, ClientApp } from './types';
 // ─── Installed MCPs ─────────────────────────────────────
 export const installed = writable<InstalledMcp[]>([
 	{
-		id: 'mach1',
-		name: 'Mach1 Router',
+		id: '1mcp',
+		name: '1mcp Router',
 		version: '1.0.0',
 		runtime: 'binary',
 		enabled: true,
-		command: 'mach1-router',
+		command: '1mcp-router',
 		description: 'Semantic router for MCPs. Auto-activates required tools automatically using semantic search of prompt.'
 	},
 	{
@@ -170,22 +170,102 @@ export const clients = writable<ClientApp[]>([
 	}
 ]);
 
-// ─── User counter (base 300 + real) ────────────────────
-export const userCount = writable(300);
+// ─── User counter (real from API) ──────────────────────
+export const userCount = writable(0);
 
 let counterInterval: ReturnType<typeof setInterval> | null = null;
 
-export function startUserCounter() {
+export async function startUserCounter() {
 	if (counterInterval) return;
-	counterInterval = setInterval(() => {
-		userCount.update((n) => n + Math.floor(Math.random() * 3));
-	}, 4000);
+	await fetchUserCount();
+	// Refresh every 60s
+	counterInterval = setInterval(fetchUserCount, 60000);
+}
+
+async function fetchUserCount() {
+	try {
+		const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
+		const res = await fetch(`${API_URL}/api/stats`);
+		if (res.ok) {
+			const data = await res.json();
+			userCount.set(data.total_users ?? 0);
+		}
+	} catch {
+		// API unavailable — keep last known value
+	}
 }
 
 export function stopUserCounter() {
 	if (counterInterval) {
 		clearInterval(counterInterval);
 		counterInterval = null;
+	}
+}
+
+// ─── Marketplace sync from API ──────────────────────────
+
+/** Fetch the marketplace catalog from the cloud API. If running inside Tauri,
+ *  also persists the result to local SQLite via the sync_marketplace command.
+ *  Falls back to the static store if the API is unreachable.
+ */
+export async function fetchMarketplace() {
+	try {
+		const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
+		const res = await fetch(`${API_URL}/api/marketplace`);
+		if (!res.ok) return;
+
+		const data = await res.json();
+		const apiItems: Array<{
+			id: string; name: string; description: string; version: string;
+			runtime: string; tags: string[]; homepage: string; license: string;
+		}> = data.items ?? [];
+
+		if (apiItems.length === 0) return;
+
+		// Merge API data into the marketplace store (preserves install state, ratings etc.)
+		marketplace.update((local) => {
+			const byId = new Map(local.map((m) => [m.id, m]));
+			const merged: typeof local = [];
+
+			for (const apiItem of apiItems) {
+				const existing = byId.get(apiItem.id);
+				merged.push({
+					...(existing ?? {
+						rating: 4.5,
+						reviewCount: 0,
+						downloads: 0,
+						verificationStatus: 'unverified' as const,
+						publishedAt: new Date().toISOString().slice(0, 10),
+						installed: false,
+					}),
+					id: apiItem.id,
+					name: apiItem.name,
+					shortDescription: apiItem.description,
+					version: apiItem.version,
+					runtime: apiItem.runtime as typeof local[number]['runtime'],
+					tags: apiItem.tags ?? [],
+					author: existing?.author ?? 'community',
+				});
+				byId.delete(apiItem.id); // mark as processed
+			}
+
+			// Keep any locally-only items not in the API response
+			for (const remaining of byId.values()) {
+				merged.push(remaining);
+			}
+
+			return merged;
+		});
+
+		// Persist to local SQLite if inside Tauri
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			await invoke('sync_marketplace', { items: apiItems });
+		} catch {
+			// Not in Tauri (browser preview) — skip
+		}
+	} catch {
+		// API unavailable — keep static store as-is
 	}
 }
 

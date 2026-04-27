@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -40,9 +41,26 @@ CREATE TABLE IF NOT EXISTS marketplace_items (
     version      TEXT NOT NULL,
     runtime      TEXT NOT NULL,
     author_email TEXT NOT NULL DEFAULT '',
-    published_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    tags         TEXT NOT NULL DEFAULT '[]',
+    homepage     TEXT NOT NULL DEFAULT '',
+    license      TEXT NOT NULL DEFAULT '',
+    published_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 `
+
+// MarketplaceItem is a row in marketplace_items. Tags is a JSON array string.
+type MarketplaceItem struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Version     string   `json:"version"`
+	Runtime     string   `json:"runtime"`
+	AuthorEmail string   `json:"author_email,omitempty"`
+	Tags        []string `json:"tags"`
+	Homepage    string   `json:"homepage,omitempty"`
+	License     string   `json:"license,omitempty"`
+}
 
 // User is a registered account row.
 type User struct {
@@ -164,4 +182,55 @@ func (d *DB) GetUserCount(ctx context.Context) (int64, error) {
 		return 0, fmt.Errorf("clouddb: user count: %w", err)
 	}
 	return n, nil
+}
+
+// UpsertMarketplaceItems inserts or updates a batch of marketplace items.
+func (d *DB) UpsertMarketplaceItems(ctx context.Context, items []MarketplaceItem) error {
+	for _, item := range items {
+		tagsJSON, _ := json.Marshal(item.Tags)
+		_, err := d.pool.Exec(ctx, `
+			INSERT INTO marketplace_items (id, name, description, version, runtime, author_email, tags, homepage, license, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+			ON CONFLICT (id) DO UPDATE SET
+				name         = EXCLUDED.name,
+				description  = EXCLUDED.description,
+				version      = EXCLUDED.version,
+				runtime      = EXCLUDED.runtime,
+				tags         = EXCLUDED.tags,
+				homepage     = EXCLUDED.homepage,
+				license      = EXCLUDED.license,
+				updated_at   = now()`,
+			item.ID, item.Name, item.Description, item.Version, item.Runtime,
+			item.AuthorEmail, string(tagsJSON), item.Homepage, item.License,
+		)
+		if err != nil {
+			return fmt.Errorf("clouddb: upsert marketplace item %s: %w", item.ID, err)
+		}
+	}
+	return nil
+}
+
+// GetMarketplaceItems returns all marketplace items ordered by name.
+func (d *DB) GetMarketplaceItems(ctx context.Context) ([]MarketplaceItem, error) {
+	rows, err := d.pool.Query(ctx, `
+		SELECT id, name, description, version, runtime, author_email, tags, homepage, license
+		FROM marketplace_items
+		ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("clouddb: list marketplace: %w", err)
+	}
+	defer rows.Close()
+
+	var out []MarketplaceItem
+	for rows.Next() {
+		var item MarketplaceItem
+		var tagsJSON string
+		if err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Version,
+			&item.Runtime, &item.AuthorEmail, &tagsJSON, &item.Homepage, &item.License); err != nil {
+			return nil, fmt.Errorf("clouddb: scan marketplace item: %w", err)
+		}
+		_ = json.Unmarshal([]byte(tagsJSON), &item.Tags)
+		out = append(out, item)
+	}
+	return out, rows.Err()
 }

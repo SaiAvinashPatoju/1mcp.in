@@ -7,12 +7,41 @@ const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://
 
 export const user = writable<User | null>(null);
 export const authLoading = writable(false);
+export const rememberMe = writable(true);
 
 export const isAuthenticated = derived(user, ($u) => $u !== null);
 
-/** Restore session from localStorage on page load. */
+function getStorage(): Storage | null {
+	if (typeof localStorage === 'undefined') return null;
+	return localStorage;
+}
+
+function getToken(): string | null {
+	if (typeof localStorage === 'undefined') return null;
+	// Check localStorage first (remember me), then sessionStorage
+	return localStorage.getItem('mcp_token') ?? sessionStorage.getItem('mcp_token');
+}
+
+function setToken(token: string, remember: boolean): void {
+	if (typeof localStorage === 'undefined') return;
+	if (remember) {
+		localStorage.setItem('mcp_token', token);
+		sessionStorage.removeItem('mcp_token');
+	} else {
+		sessionStorage.setItem('mcp_token', token);
+		localStorage.removeItem('mcp_token');
+	}
+}
+
+function clearToken(): void {
+	if (typeof localStorage === 'undefined') return;
+	localStorage.removeItem('mcp_token');
+	sessionStorage.removeItem('mcp_token');
+}
+
+/** Restore session from storage on page load. */
 export async function restoreSession(): Promise<void> {
-	const token = typeof localStorage !== 'undefined' ? localStorage.getItem('mcp_token') : null;
+	const token = getToken();
 	if (!token) return;
 	try {
 		const res = await fetch(`${API_URL}/api/auth/me`, {
@@ -22,14 +51,14 @@ export async function restoreSession(): Promise<void> {
 			const { user: u } = await res.json();
 			user.set(u);
 		} else {
-			localStorage.removeItem('mcp_token');
+			clearToken();
 		}
 	} catch {
 		// Network unavailable — stay logged-out; local SQLite still works.
 	}
 }
 
-export async function signIn(email: string, password: string): Promise<void> {
+export async function signIn(email: string, password: string, remember = true): Promise<void> {
 	authLoading.set(true);
 	try {
 		const res = await fetch(`${API_URL}/api/auth/login`, {
@@ -39,7 +68,7 @@ export async function signIn(email: string, password: string): Promise<void> {
 		});
 		const data = await res.json();
 		if (!res.ok) throw new Error(data.error ?? 'Login failed');
-		if (typeof localStorage !== 'undefined') localStorage.setItem('mcp_token', data.token);
+		setToken(data.token, remember);
 		user.set({ id: data.user.id, name: data.user.name, email: data.user.email });
 	} finally {
 		authLoading.set(false);
@@ -56,7 +85,7 @@ export async function signUp(name: string, email: string, password: string): Pro
 		});
 		const data = await res.json();
 		if (!res.ok) throw new Error(data.error ?? 'Registration failed');
-		if (typeof localStorage !== 'undefined') localStorage.setItem('mcp_token', data.token);
+		setToken(data.token, true); // always remember on signup
 		user.set({ id: data.user.id, name: data.user.name, email: data.user.email });
 	} finally {
 		authLoading.set(false);
@@ -64,6 +93,6 @@ export async function signUp(name: string, email: string, password: string): Pro
 }
 
 export function signOut(): void {
-	if (typeof localStorage !== 'undefined') localStorage.removeItem('mcp_token');
+	clearToken();
 	user.set(null);
 }

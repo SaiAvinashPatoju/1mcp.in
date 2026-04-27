@@ -1,32 +1,76 @@
-name: CI Build
+name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  # ── Go: lint, test, build ───────────────────────────
+  go:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: services/central-mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/central-mcp/go.mod
+          cache-dependency-path: services/central-mcp/go.sum
+
+      - name: Sync registry-index into Go embed dir
+        run: |
+          mkdir -p cmd/mcpapiserver/data
+          cp ../../packages/registry-index/index.json cmd/mcpapiserver/data/registry-index.json
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -race -timeout 60s ./...
+
+      - name: Build binaries
+        run: |
+          go build ./cmd/centralmcpd
+          go build ./cmd/mcpapiserver
+          go build ./cmd/onemcpctl
+
+  # ── Version consistency check ───────────────────────
+  version-check:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check version consistency
+        run: |
+          TAURI_VER=$(jq -r '.version' services/web-ui/src-tauri/tauri.conf.json)
+          CARGO_VER=$(grep '^version' services/web-ui/src-tauri/Cargo.toml | head -1 | grep -oP '"\K[^"]+')
+          echo "tauri.conf.json: $TAURI_VER"
+          echo "Cargo.toml: $CARGO_VER"
+          if [ "$TAURI_VER" != "$CARGO_VER" ]; then
+            echo "::error::Version mismatch: tauri.conf.json=$TAURI_VER vs Cargo.toml=$CARGO_VER"
+            exit 1
+          fi
+
+  # ── Tauri desktop app (compile check per platform) ──
+  tauri:
+    needs: [go, version-check]
     strategy:
       fail-fast: false
       matrix:
         include:
-          # ── Windows ──────────────────────────────────
           - platform: windows-latest
             rust_target: x86_64-pc-windows-msvc
             args: --target x86_64-pc-windows-msvc
-          # ── macOS Intel ───────────────────────────────
-          - platform: macos-latest
-            rust_target: x86_64-apple-darwin
-            args: --target x86_64-apple-darwin
-          # ── macOS Apple Silicon ───────────────────────
           - platform: macos-latest
             rust_target: aarch64-apple-darwin
             args: --target aarch64-apple-darwin
-          # ── Ubuntu / Debian ───────────────────────────
           - platform: ubuntu-22.04
             rust_target: x86_64-unknown-linux-gnu
             args: --target x86_64-unknown-linux-gnu
@@ -34,10 +78,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-      # ── Checkout ────────────────────────────────────
       - uses: actions/checkout@v4
 
-      # ── Rust toolchain ──────────────────────────────
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -48,7 +90,6 @@ jobs:
         with:
           workspaces: services/web-ui/src-tauri
 
-      # ── Node.js ─────────────────────────────────────
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
@@ -56,7 +97,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: services/web-ui/package-lock.json
 
-      # ── Linux system deps ───────────────────────────
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -70,13 +110,11 @@ jobs:
             libssl-dev \
             pkg-config
 
-      # ── npm install ─────────────────────────────────
       - name: Install frontend deps
         run: npm install
         working-directory: services/web-ui
 
-      # ── Tauri build (no release) ────────────────────
-      - name: Build Tauri app
+      - name: Build Tauri app (no release)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

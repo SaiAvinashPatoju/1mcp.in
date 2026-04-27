@@ -4,5 +4,5 @@
 )]
 
 fn main() {
-    mach1_lib::run();
+    onemcp_lib::run();
 }

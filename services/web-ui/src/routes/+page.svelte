@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { signIn, signUp, authLoading, isAuthenticated } from '$lib/auth';
+	import { signIn, signUp, authLoading, isAuthenticated, rememberMe } from '$lib/auth';
 	import { onMount } from 'svelte';
 
 	let mode: 'signin' | 'signup' = 'signin';
@@ -9,6 +9,7 @@
 	let password = '';
 	let showPassword = false;
 	let error = '';
+	let remember = true;
 
 	onMount(() => {
 		const unsub = isAuthenticated.subscribe((v) => {
@@ -19,11 +20,15 @@
 
 	async function handleSubmit() {
 		error = '';
-		if (mode === 'signup') {
-			if (!name.trim()) { error = 'Name is required'; return; }
-			await signUp(name.trim(), email, password);
-		} else {
-			await signIn(email, password);
+		try {
+			if (mode === 'signup') {
+				if (!name.trim()) { error = 'Name is required'; return; }
+				await signUp(name.trim(), email, password);
+			} else {
+				await signIn(email, password, remember);
+			}
+		} catch (e: any) {
+			error = e?.message ?? 'Something went wrong';
 		}
 	}
 </script>
@@ -34,10 +39,10 @@
 	<div class="w-full max-w-sm relative z-10">
 		<div class="flex flex-col items-center gap-3 mb-8">
 			<div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-violet-800 flex items-center justify-center shadow-lg shadow-violet-900/50">
-				<span class="text-xl font-black text-white">M1</span>
+				<span class="text-xl font-black text-white">1M</span>
 			</div>
 			<div class="text-center">
-				<h1 class="text-2xl font-bold text-white/95">Mach1</h1>
+				<h1 class="text-2xl font-bold text-white/95">1mcp.in</h1>
 				<p class="text-sm text-white/30 mt-1">Your universal MCP gateway</p>
 			</div>
 		</div>
@@ -78,6 +83,13 @@
 					</div>
 				</div>
 
+				{#if mode === 'signin'}
+					<label class="flex items-center gap-2 cursor-pointer select-none">
+						<input type="checkbox" bind:checked={remember} class="w-3.5 h-3.5 rounded border border-white/[0.1] bg-black/40 accent-violet-600" />
+						<span class="text-xs text-white/40">Remember me</span>
+					</label>
+				{/if}
+
 				{#if error}
 					<p class="text-xs text-red-400 bg-red-900/10 border border-red-900/40 rounded-lg px-3 py-2">{error}</p>
 				{/if}
@@ -95,6 +107,6 @@
 			</form>
 		</div>
 
-		<p class="text-center text-xs text-white/15 mt-4">By continuing, you agree to the Mach1 Terms of Service.</p>
+		<p class="text-center text-xs text-white/15 mt-4">By continuing, you agree to the 1mcp.in Terms of Service.</p>
 	</div>
 </div>

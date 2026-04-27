@@ -1,17 +1,43 @@
 <script lang="ts">
 	import type { ClientApp } from '$lib/types';
+	import { browser } from '$app/environment';
 
 	export let client: ClientApp;
 	export let onActivate: () => void;
 	export let onDeactivate: () => void;
 
+	const isTauri = browser && '__TAURI_INTERNALS__' in window;
 	let settingUp = false;
+	let showManual = false;
+
+	const manualInstructions: Record<string, string> = {
+		vscode: '1. Open VS Code Settings (JSON)\n2. Add under "mcp.servers":\n   "1mcp": { "command": "centralmcpd", "args": ["--db", "<path-to-db>"] }',
+		cursor: '1. Create/edit ~/.cursor/mcp.json\n2. Add under "mcpServers":\n   "1mcp": { "command": "centralmcpd", "args": ["--db", "<path-to-db>"] }',
+		claude: '1. Open Claude Desktop → Settings → Developer → Edit Config\n2. Add under "mcpServers":\n   "1mcp": { "command": "centralmcpd", "args": ["--db", "<path-to-db>"] }',
+		claudecode: '1. Edit ~/.claude.json\n2. Add under "mcpServers":\n   "1mcp": { "command": "centralmcpd", "args": ["--db", "<path-to-db>"] }',
+		codex: '1. Edit ~/.codex/mcp.json\n2. Add under "mcpServers":\n   "1mcp": { "command": "centralmcpd", "args": ["--db", "<path-to-db>"] }',
+	};
 
 	async function handleSetup() {
+		if (!isTauri) {
+			showManual = !showManual;
+			return;
+		}
 		settingUp = true;
-		await new Promise(r => setTimeout(r, 1500));
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			const path = await invoke<string>('patch_client_config', { clientId: client.id });
+			onActivate();
+		} catch (e: any) {
+			const msg = typeof e === 'string' ? e : e?.message ?? 'Unknown error';
+			if (msg.includes('not yet supported')) {
+				showManual = true;
+			} else {
+				alert(`Setup failed: ${msg}\n\nPlease configure manually.`);
+				showManual = true;
+			}
+		}
 		settingUp = false;
-		onActivate();
 	}
 </script>
 
@@ -23,7 +49,7 @@
 			{#if client.connected}
 				<span class="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-emerald-900/20 text-emerald-400 border border-emerald-800/50">
 					<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399]"></span>
-					Mach1 Connected
+					1mcp Connected
 				</span>
 			{/if}
 		</div>
@@ -42,8 +68,15 @@
 				</svg>
 				Setting up...
 			{:else}
-				Setup Mach1
+				Setup 1mcp
 			{/if}
 		</button>
 	{/if}
 </div>
+
+{#if showManual}
+	<div class="mt-2 ml-12 p-3 rounded-lg bg-black/40 border border-white/[0.06] text-xs font-mono text-white/60 whitespace-pre-line leading-relaxed">
+		{manualInstructions[client.id] ?? 'Add "1mcp" to your client\'s MCP server configuration with command "centralmcpd".'}
+		<button on:click={() => showManual = false} class="mt-2 block text-violet-400 hover:text-violet-300 font-sans text-[11px]">Dismiss</button>
+	</div>
+{/if}
