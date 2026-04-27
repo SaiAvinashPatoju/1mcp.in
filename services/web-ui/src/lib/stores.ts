@@ -4,11 +4,20 @@ import type { InstalledMcp, MarketplaceMcp, ClientApp } from './types';
 // ─── Installed MCPs ─────────────────────────────────────
 export const installed = writable<InstalledMcp[]>([
 	{
+		id: 'mach1',
+		name: 'Mach1 Router',
+		version: '1.0.0',
+		runtime: 'binary',
+		enabled: true,
+		command: 'mach1-router',
+		description: 'Semantic router for MCPs. Auto-activates required tools automatically using semantic search of prompt.'
+	},
+	{
 		id: 'github',
 		name: 'GitHub',
 		version: '0.6.2',
 		runtime: 'node',
-		enabled: true,
+		enabled: false,
 		command: 'npx -y @modelcontextprotocol/server-github',
 		description: 'Search code, read issues/PRs, and create issues on GitHub via the GitHub API.',
 		patProvider: 'github'
@@ -18,7 +27,7 @@ export const installed = writable<InstalledMcp[]>([
 		name: 'Knowledge Graph Memory',
 		version: '0.6.0',
 		runtime: 'node',
-		enabled: true,
+		enabled: false,
 		command: 'npx -y @modelcontextprotocol/server-memory',
 		description: 'Persistent knowledge graph the agent can query and update across sessions.'
 	}
@@ -134,11 +143,35 @@ export const clients = writable<ClientApp[]>([
 		description: 'Claude Code CLI — terminal-based AI agent',
 		connected: false,
 		connectCommand: 'connect claudecode'
+	},
+	{
+		id: 'codex',
+		name: 'Codex',
+		icon: '🔮',
+		description: 'Codex AI Assistant integration',
+		connected: false,
+		connectCommand: 'connect codex'
+	},
+	{
+		id: 'antigravity',
+		name: 'Antigravity',
+		icon: '🚀',
+		description: 'Antigravity agent integration',
+		connected: false,
+		connectCommand: 'connect antigravity'
+	},
+	{
+		id: 'opencode',
+		name: 'OpenCode',
+		icon: '📖',
+		description: 'OpenCode open-source IDE integration',
+		connected: false,
+		connectCommand: 'connect opencode'
 	}
 ]);
 
-// ─── User counter (base 1000 + real) ────────────────────
-export const userCount = writable(1000);
+// ─── User counter (base 300 + real) ────────────────────
+export const userCount = writable(300);
 
 let counterInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -187,7 +220,7 @@ export function installMcp(id: string) {
 			name: mcp.name,
 			version: mcp.version,
 			runtime: mcp.runtime,
-			enabled: true,
+			enabled: false,
 			command: `npx -y @modelcontextprotocol/server-${mcp.id}`,
 			description: mcp.shortDescription,
 			patProvider: mcp.patProvider

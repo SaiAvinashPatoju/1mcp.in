@@ -26,10 +26,13 @@
 			</div>
 		</div>
 		<button
-			on:click={onToggle}
-			title={mcp.enabled ? 'Disable' : 'Enable'}
+			on:click={() => {
+				if (mcp.id !== 'mach1') onToggle();
+			}}
+			title={mcp.id === 'mach1' ? 'Mach1 must remain active' : mcp.enabled ? 'Disable' : 'Enable'}
 			class="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors
-				{mcp.enabled ? 'bg-emerald-900/30 text-emerald-400 hover:bg-emerald-900/50' : 'bg-white/[0.04] text-white/30 hover:bg-white/[0.08] hover:text-white/60'}"
+				{mcp.enabled ? 'bg-emerald-900/30 text-emerald-400 hover:bg-emerald-900/50' : 'bg-white/[0.04] text-white/30 hover:bg-white/[0.08] hover:text-white/60'}
+				{mcp.id === 'mach1' ? 'opacity-50 cursor-not-allowed' : ''}"
 		>
 			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 				<path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
@@ -40,7 +43,13 @@
 	<div class="flex items-center gap-1.5">
 		<span class="w-1.5 h-1.5 rounded-full {mcp.enabled ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-white/20'}"></span>
 		<span class="text-xs {mcp.enabled ? 'text-emerald-400' : 'text-white/30'}">
-			{mcp.enabled ? 'Running' : 'Disabled'}
+			{#if mcp.id === 'mach1'}
+				Alive & Routing
+			{:else if mcp.enabled}
+				Running
+			{:else}
+				Sleeping (Auto-activated by Mach1)
+			{/if}
 		</span>
 	</div>
 

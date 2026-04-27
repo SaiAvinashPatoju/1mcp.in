@@ -1,6 +1,6 @@
 {
   "productName": "Mach1 MCP",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "com.mach1.mcp",
   "build": {
     "frontendDist": "../build",

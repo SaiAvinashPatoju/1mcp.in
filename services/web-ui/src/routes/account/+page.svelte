@@ -6,9 +6,21 @@
 	let notifySecurity = true;
 	let notifyReviews = false;
 
-	$: initials = $user?.name?.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2) ?? '??';
+	let displayName = $user?.name ?? '';
+	let emailAddress = $user?.email ?? '';
+
+	// Update local variables when user store changes
+	$: if ($user) {
+		displayName = $user.name;
+		emailAddress = $user.email;
+	}
+
+	$: initials = displayName.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2) || '??';
 
 	function handleSave() {
+		if ($user) {
+			user.update(u => u ? { ...u, name: displayName, email: emailAddress } : u);
+		}
 		saved = true;
 		setTimeout(() => (saved = false), 2000);
 	}
@@ -24,19 +36,19 @@
 				{initials}
 			</div>
 			<div>
-				<p class="text-base font-semibold text-white/90">{$user?.name}</p>
-				<p class="text-sm text-white/30">{$user?.email}</p>
+				<p class="text-base font-semibold text-white/90">{displayName}</p>
+				<p class="text-sm text-white/30">{emailAddress}</p>
 				<span class="inline-block mt-2 text-xs px-2 py-0.5 rounded-full bg-violet-900/30 text-violet-400 border border-violet-800/50">Free Plan</span>
 			</div>
 		</div>
 		<div class="space-y-4">
 			<div>
 				<label class="block text-xs font-medium text-white/30 mb-1.5" for="display-name">Display Name</label>
-				<input id="display-name" value={$user?.name ?? ''} class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 focus:outline-none focus:border-violet-500 transition-colors" />
+				<input id="display-name" bind:value={displayName} class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 focus:outline-none focus:border-violet-500 transition-colors" />
 			</div>
 			<div>
 				<label class="block text-xs font-medium text-white/30 mb-1.5" for="email-addr">Email Address</label>
-				<input id="email-addr" type="email" value={$user?.email ?? ''} class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 focus:outline-none focus:border-violet-500 transition-colors" />
+				<input id="email-addr" type="email" bind:value={emailAddress} class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 focus:outline-none focus:border-violet-500 transition-colors" />
 			</div>
 		</div>
 	</div>
