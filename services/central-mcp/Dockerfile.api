@@ -1,7 +1,7 @@
 # Builds the mcpapiserver binary for Railway deployment.
 # Railway detects this Dockerfile automatically when the service root is
 # services/central-mcp and the build command is overridden to use this file.
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 COPY services/central-mcp/go.mod services/central-mcp/go.sum ./
 RUN go mod download
