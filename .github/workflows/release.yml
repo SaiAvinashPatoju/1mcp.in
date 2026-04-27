@@ -22,9 +22,10 @@ jobs:
           go-version-file: services/central-mcp/go.mod
           cache-dependency-path: services/central-mcp/go.sum
       - name: Sync registry-index into Go embed dir
+        shell: pwsh
         run: |
-          mkdir -p cmd/mcpapiserver/data
-          cp ../../packages/registry-index/index.json cmd/mcpapiserver/data/registry-index.json
+          New-Item -ItemType Directory -Force -Path "cmd/mcpapiserver/data" | Out-Null
+          Copy-Item "../../packages/registry-index/index.json" "cmd/mcpapiserver/data/registry-index.json" -Force
       - run: go test -race -timeout 60s ./...
 
   # ── Deploy mcpapiserver to Railway ──────────────────
