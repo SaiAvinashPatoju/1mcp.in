@@ -1,0 +1,7 @@
+# Railway root-level Railway config to route the build
+# This tells Railway which Dockerfile to use for the mcpapiserver service
+# since the repo contains multiple services.
+
+[build]
+dockerfilePath = "services/central-mcp/Dockerfile.api"
+contextRelativePath = "services/central-mcp"
