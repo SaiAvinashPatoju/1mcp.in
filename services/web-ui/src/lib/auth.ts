@@ -66,10 +66,23 @@ export async function signIn(email: string, password: string, remember = true): 
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ email, password })
 		});
+		
+		if (!res.ok) {
+			const data = await res.json().catch(() => ({}));
+			throw new Error(data.error ?? `HTTP ${res.status}: Login failed`);
+		}
+		
 		const data = await res.json();
-		if (!res.ok) throw new Error(data.error ?? 'Login failed');
+		if (!data.token || !data.user) {
+			throw new Error('Invalid response: missing token or user data');
+		}
+		
 		setToken(data.token, remember);
 		user.set({ id: data.user.id, name: data.user.name, email: data.user.email });
+	} catch (error) {
+		const msg = error instanceof Error ? error.message : 'Login failed';
+		authLoading.set(false);
+		throw new Error(msg);
 	} finally {
 		authLoading.set(false);
 	}
@@ -83,10 +96,23 @@ export async function signUp(name: string, email: string, password: string): Pro
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ name, email, password })
 		});
+		
+		if (!res.ok) {
+			const data = await res.json().catch(() => ({}));
+			throw new Error(data.error ?? `HTTP ${res.status}: Registration failed`);
+		}
+		
 		const data = await res.json();
-		if (!res.ok) throw new Error(data.error ?? 'Registration failed');
+		if (!data.token || !data.user) {
+			throw new Error('Invalid response: missing token or user data');
+		}
+		
 		setToken(data.token, true); // always remember on signup
 		user.set({ id: data.user.id, name: data.user.name, email: data.user.email });
+	} catch (error) {
+		const msg = error instanceof Error ? error.message : 'Registration failed';
+		authLoading.set(false);
+		throw new Error(msg);
 	} finally {
 		authLoading.set(false);
 	}
