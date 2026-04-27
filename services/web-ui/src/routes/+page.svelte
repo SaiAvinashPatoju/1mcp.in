@@ -10,6 +10,7 @@
 	let showPassword = false;
 	let error = '';
 	let remember = true;
+	const authModes = ['signin', 'signup'] as const;
 
 	onMount(() => {
 		const unsub = isAuthenticated.subscribe((v) => {
@@ -49,7 +50,7 @@
 
 		<div class="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6 shadow-2xl backdrop-blur-sm">
 			<div class="flex bg-black/30 rounded-lg p-1 mb-6 border border-white/[0.04]">
-				{#each ['signin', 'signup'] as m}
+				{#each authModes as m}
 					<button
 						on:click={() => { mode = m; error = ''; }}
 						class="flex-1 py-1.5 text-sm rounded-md transition-all font-medium

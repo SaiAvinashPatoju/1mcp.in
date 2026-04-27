@@ -12,6 +12,7 @@
 //	onemcpctl env set <id> NAME=VALUE
 //	onemcpctl env list <id>
 //	onemcpctl env unset <id> NAME
+//	onemcpctl start [--transport http|stdio]
 //	onemcpctl connect <client>    # client = vscode|cursor|claude
 //	onemcpctl disconnect <client>
 //	onemcpctl doctor
@@ -55,6 +56,8 @@ func main() {
 		err = runCatalog(args)
 	case "install":
 		err = runInstall(args)
+	case "tools":
+		err = runTools(args)
 	case "uninstall":
 		err = runUninstall(args)
 	case "list":
@@ -65,6 +68,8 @@ func main() {
 		err = runSetEnabled(args, false)
 	case "env":
 		err = runEnv(args)
+	case "start":
+		err = runStart(args)
 	case "connect":
 		err = runConnect(args)
 	case "disconnect":
@@ -90,12 +95,15 @@ func usage() {
 
   catalog list [--catalog FILE]
   install <id> [--catalog FILE]
+	tools pending
+	tools approve <mcp-id> <tool-name>
   uninstall <id>
   list
   enable <id> | disable <id>
   env set <id> NAME=VALUE
   env unset <id> NAME
   env list <id>
+	start [--transport http|stdio]
   connect <vscode|cursor|claude>
   disconnect <vscode|cursor|claude>
   doctor
@@ -103,6 +111,47 @@ func usage() {
 Data dir:        $ONEMCP_HOME or %APPDATA%/OneMcp
 Default catalog: ./packages/registry-index/index.json (or --catalog)
 `)
+}
+
+func runStart(args []string) error {
+	transport := "http"
+	listen := "127.0.0.1:3000"
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--transport":
+			if i+1 >= len(args) {
+				return errors.New("--transport requires stdio or http")
+			}
+			transport = args[i+1]
+			i++
+		case "--listen":
+			if i+1 >= len(args) {
+				return errors.New("--listen requires an address")
+			}
+			listen = args[i+1]
+			i++
+		default:
+			return fmt.Errorf("unknown start flag: %s", args[i])
+		}
+	}
+	exe, err := centralBinaryPath()
+	if err != nil {
+		return err
+	}
+	dbPath, err := paths.RegistryDB()
+	if err != nil {
+		return err
+	}
+	cmdArgs := []string{"--db", dbPath, "--transport", transport}
+	if transport == "http" {
+		cmdArgs = append(cmdArgs, "--listen", listen)
+	}
+	cmd := exec.Command(exe, cmdArgs...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	fmt.Printf("starting 1mcp router (%s)\n", transport)
+	return cmd.Run()
 }
 
 // ----- catalog ---------------------------------------------------------------
@@ -154,6 +203,9 @@ func runInstall(args []string) error {
 		verb = "reinstalled"
 	}
 	fmt.Printf("%s %s (%s) in %s\n", verb, m.ID, m.Version, res.Duration.Round(time.Millisecond))
+	if res.Verification != "" {
+		fmt.Printf("verified %s catalog digest: %s\n", res.Verification, m.SHA256)
+	}
 	if res.Warning != "" {
 		fmt.Println("warning:", res.Warning)
 	}
@@ -162,6 +214,45 @@ func runInstall(args []string) error {
 		fmt.Printf("  onemcpctl env set %s %s=...\n", m.ID, needs[0])
 	}
 	return nil
+}
+
+func runTools(args []string) error {
+	if len(args) < 1 {
+		return errors.New("usage: onemcpctl tools pending | tools approve <mcp-id> <tool-name>")
+	}
+	db, err := openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	switch args[0] {
+	case "pending":
+		pending, err := db.ListPendingToolReviews(context.Background())
+		if err != nil {
+			return err
+		}
+		if len(pending) == 0 {
+			fmt.Println("no tool definition changes pending review")
+			return nil
+		}
+		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "MCP\tTOOL\tAPPROVED_HASH\tCURRENT_HASH")
+		for _, r := range pending {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", r.MCPID, r.ToolName, r.ApprovedHash, r.CurrentHash)
+		}
+		return tw.Flush()
+	case "approve":
+		if len(args) < 3 {
+			return errors.New("usage: onemcpctl tools approve <mcp-id> <tool-name>")
+		}
+		if err := db.ApproveToolDefinition(context.Background(), args[1], args[2]); err != nil {
+			return err
+		}
+		fmt.Printf("approved tool definition %s__%s\n", args[1], args[2])
+		return nil
+	default:
+		return fmt.Errorf("unknown tools subcommand: %s", args[0])
+	}
 }
 
 func runUninstall(args []string) error {

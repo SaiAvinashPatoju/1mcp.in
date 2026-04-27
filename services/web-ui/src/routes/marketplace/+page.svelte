@@ -11,6 +11,7 @@
 	let sort: SortOption = 'rating';
 	let filter: FilterOption = 'all';
 	let showPublish = false;
+	const filterOptions: FilterOption[] = ['all', 'verified', 'community', 'installed'];
 
 	$: filtered = (() => {
 		let result = [...$marketplace];
@@ -24,13 +25,12 @@
 					m.author.toLowerCase().includes(q)
 			);
 		}
-		if (filter === 'verified') result = result.filter((m) => m.verificationStatus === 'verified');
-		else if (filter === 'community') result = result.filter((m) => m.verificationStatus !== 'verified');
+		if (filter === 'verified') result = result.filter((m) => trustRank(m.verificationStatus) <= 1);
+		else if (filter === 'community') result = result.filter((m) => trustRank(m.verificationStatus) > 1);
 		else if (filter === 'installed') result = result.filter((m) => m.installed);
 
 		result.sort((a, b) => {
-			if (a.verificationStatus === 'verified' && b.verificationStatus !== 'verified') return -1;
-			if (b.verificationStatus === 'verified' && a.verificationStatus !== 'verified') return 1;
+			if (trustRank(a.verificationStatus) !== trustRank(b.verificationStatus)) return trustRank(a.verificationStatus) - trustRank(b.verificationStatus);
 			if (sort === 'rating') return b.rating - a.rating;
 			if (sort === 'downloads') return b.downloads - a.downloads;
 			return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
@@ -38,12 +38,19 @@
 		return result;
 	})();
 
-	$: verifiedList = filtered.filter((m) => m.verificationStatus === 'verified');
-	$: communityList = filtered.filter((m) => m.verificationStatus !== 'verified');
+	$: verifiedList = filtered.filter((m) => trustRank(m.verificationStatus) <= 1);
+	$: communityList = filtered.filter((m) => trustRank(m.verificationStatus) > 1);
 	$: showSectioned = filter === 'all' && !query.trim();
 
-	$: totalVerified = $marketplace.filter((m) => m.verificationStatus === 'verified').length;
-	$: totalCommunity = $marketplace.filter((m) => m.verificationStatus !== 'verified').length;
+	$: totalVerified = $marketplace.filter((m) => trustRank(m.verificationStatus) <= 1).length;
+	$: totalCommunity = $marketplace.filter((m) => trustRank(m.verificationStatus) > 1).length;
+
+	function trustRank(status: string): number {
+		if (status === 'anthropic-official') return 0;
+		if (status === 'onemcp-verified' || status === 'verified') return 1;
+		if (status === 'pending') return 2;
+		return 3;
+	}
 
 	function handlePublish(data: { name: string; description: string; version: string; runtime: 'node' | 'python' | 'go' | 'binary'; tags: string[]; verificationStatus: 'verified' | 'unverified'; fileName: string }) {
 		marketplace.update((list) => [
@@ -58,7 +65,7 @@
 				rating: 0,
 				reviewCount: 0,
 				downloads: 0,
-				verificationStatus: data.verificationStatus === 'verified' ? 'pending' : 'unverified',
+				verificationStatus: data.verificationStatus === 'verified' ? 'pending' : 'community',
 				publishedAt: new Date().toISOString().split('T')[0],
 				installed: false
 			},
@@ -85,7 +92,7 @@
 			<input bind:value={query} placeholder="Search servers, tags, authors…" class="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg pl-9 pr-3 py-2 text-sm text-white/80 placeholder-white/20 focus:outline-none focus:border-violet-500 transition-colors" />
 		</div>
 		<div class="flex items-center gap-1 bg-white/[0.03] border border-white/[0.06] rounded-lg p-1">
-			{#each ['all', 'verified', 'community', 'installed'] as f}
+			{#each filterOptions as f}
 				<button on:click={() => (filter = f)} class="text-xs px-3 py-1 rounded-md transition-colors capitalize {filter === f ? 'bg-violet-600 text-white' : 'text-white/30 hover:text-white/60'}">
 					{f}
 				</button>

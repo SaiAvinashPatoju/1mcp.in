@@ -32,6 +32,10 @@ try {
     go mod tidy
     if ($LASTEXITCODE -ne 0) { throw "go mod tidy failed" }
 
+    Write-Host "verify registry signatures"
+    go run ./cmd/onemcpsignregistry --check --catalog (Join-Path $repoRoot "packages\registry-index\index.json")
+    if ($LASTEXITCODE -ne 0) { throw "registry signature verification failed" }
+
     $cmds = @("centralmcpd", "onemcpctl", "onemcpe2e", "stubmcp", "mcpapiserver")
     foreach ($c in $cmds) {
         $out = Join-Path $OutDir "$c.exe"

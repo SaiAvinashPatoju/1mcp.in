@@ -22,12 +22,16 @@ import (
 
 	"github.com/onemcp/central-mcp/internal/envtmpl"
 	"github.com/onemcp/central-mcp/internal/manifest"
+	"github.com/onemcp/central-mcp/internal/observability"
 	"github.com/onemcp/central-mcp/internal/proto"
 	"github.com/onemcp/central-mcp/internal/registry"
 	"github.com/onemcp/central-mcp/internal/sandbox"
 	"github.com/onemcp/central-mcp/internal/secrets"
+	"github.com/onemcp/central-mcp/internal/security"
 	"github.com/onemcp/central-mcp/internal/upstream"
-)// NamespaceSep separates upstream id from the original tool name in surfaced
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+) // NamespaceSep separates upstream id from the original tool name in surfaced
 // tool names. Kept in sync with the (now legacy) router constant.
 const NamespaceSep = "__"
 
@@ -41,6 +45,8 @@ type Supervisor struct {
 
 	// warmupTimeout caps initial tools/list discovery per MCP.
 	warmupTimeout time.Duration
+	registry      *registry.DB
+	metrics       *observability.Metrics
 }
 
 type managed struct {
@@ -59,12 +65,16 @@ type managed struct {
 	startErr  error
 	idleTimer *time.Timer
 	tools     []proto.Tool // namespaced
+	blocked   map[string]registry.ToolReview
+	verified  bool
 }
 
 // Options configures a Supervisor at construction time.
 type Options struct {
 	Logger        *slog.Logger
 	WarmupTimeout time.Duration // default 15s
+	Registry      *registry.DB
+	Metrics       *observability.Metrics
 }
 
 // New builds a Supervisor from the registry and secrets store. Entries with
@@ -81,6 +91,8 @@ func New(entries []registry.Entry, getManifest func(id string) (*manifest.Manife
 		logger:        opts.Logger,
 		items:         make(map[string]*managed, len(entries)),
 		warmupTimeout: opts.WarmupTimeout,
+		registry:      opts.Registry,
+		metrics:       opts.Metrics,
 	}
 	for _, e := range entries {
 		m, err := getManifest(e.ID)
@@ -141,6 +153,7 @@ func New(entries []registry.Entry, getManifest func(id string) (*manifest.Manife
 			cwd:      e.Cwd,
 			env:      envMap,
 			idleSec:  m.IdleShutdown(),
+			blocked:  map[string]registry.ToolReview{},
 		}
 		s.items[e.ID] = mg
 		s.order = append(s.order, e.ID)
@@ -174,18 +187,15 @@ func (s *Supervisor) warmup(ctx context.Context, mg *managed) {
 		return
 	}
 
-	// Tools were cached on the client during handshake. Namespace them.
-	raw := c.Tools()
-	tools := make([]proto.Tool, 0, len(raw))
-	for _, t := range raw {
-		t.Name = mg.id + NamespaceSep + t.Name
-		tools = append(tools, t)
+	if err := s.ensureToolsVerified(wctx, mg, c); err != nil {
+		s.logger.Warn("tool hash verification failed", "id", mg.id, "err", err)
 	}
-	mg.mu.Lock()
-	mg.tools = tools
-	mg.mu.Unlock()
 
-	s.logger.Info("warmup complete", "id", mg.id, "tools", len(tools))
+	mg.mu.Lock()
+	toolCount := len(mg.tools)
+	blockedCount := len(mg.blocked)
+	mg.mu.Unlock()
+	s.logger.Info("warmup complete", "id", mg.id, "tools", toolCount, "blocked", blockedCount)
 
 	// Immediately schedule idle close so warm processes don't linger.
 	s.scheduleIdleLocked(mg)
@@ -237,6 +247,7 @@ func (s *Supervisor) startLocked(ctx context.Context, mg *managed) (*upstream.Cl
 	}
 	mg.client = c
 	mg.startErr = nil
+	mg.verified = false
 	close(mg.starting)
 	mg.starting = nil
 	s.resetIdleLocked(mg)
@@ -269,6 +280,7 @@ func (s *Supervisor) shutdownIdle(mg *managed) {
 	c := mg.client
 	mg.client = nil
 	mg.idleTimer = nil
+	mg.verified = false
 	mg.mu.Unlock()
 	if c != nil {
 		s.logger.Debug("idle shutdown", "id", mg.id)
@@ -294,10 +306,21 @@ func (s *Supervisor) Tools() []proto.Tool {
 // needed. The result bytes are forwarded verbatim to preserve any extension
 // fields the upstream returned.
 func (s *Supervisor) Call(ctx context.Context, toolName string, args json.RawMessage) (json.RawMessage, *proto.RPCError) {
+	start := time.Now()
 	id, suffix, ok := strings.Cut(toolName, NamespaceSep)
 	if !ok {
 		return nil, proto.NewError(proto.ErrInvalidParams, "tool name missing upstream prefix", toolName)
 	}
+	ctx, span := otel.Tracer("github.com/onemcp/central-mcp/router").Start(ctx, "mcp.tool_call")
+	span.SetAttributes(attribute.String("mcp.server", id), attribute.String("mcp.tool", suffix))
+	success := false
+	defer func() {
+		span.SetAttributes(attribute.Bool("mcp.success", success))
+		span.End()
+		if s.metrics != nil {
+			s.metrics.Record(observability.ToolCall{MCPID: id, ToolName: suffix, Success: success, Duration: time.Since(start)})
+		}
+	}()
 	s.mu.RLock()
 	mg := s.items[id]
 	s.mu.RUnlock()
@@ -308,6 +331,20 @@ func (s *Supervisor) Call(ctx context.Context, toolName string, args json.RawMes
 	if err != nil {
 		return nil, proto.NewError(proto.ErrInternal, "start upstream: "+err.Error(), nil)
 	}
+	if err := s.ensureToolsVerified(ctx, mg, c); err != nil {
+		return nil, proto.NewError(proto.ErrInternal, "tool definition verification: "+err.Error(), nil)
+	}
+	mg.mu.Lock()
+	if review, ok := mg.blocked[suffix]; ok {
+		mg.mu.Unlock()
+		return nil, proto.NewError(proto.ErrInternal, "tool definition changed and is pending review", map[string]string{
+			"mcp":           review.MCPID,
+			"tool":          review.ToolName,
+			"approved_hash": review.ApprovedHash,
+			"current_hash":  review.CurrentHash,
+		})
+	}
+	mg.mu.Unlock()
 	resp, err := c.Call(ctx, "tools/call", proto.CallToolParams{Name: suffix, Arguments: args})
 	// Reset idle timer regardless of success.
 	mg.mu.Lock()
@@ -316,11 +353,61 @@ func (s *Supervisor) Call(ctx context.Context, toolName string, args json.RawMes
 
 	if err != nil {
 		if resp != nil && resp.Error != nil {
+			if len(resp.Error.Data) > 0 {
+				resp.Error.Data = security.RedactJSON(resp.Error.Data)
+			}
+			resp.Error.Message = security.RedactString(resp.Error.Message)
 			return nil, resp.Error
 		}
 		return nil, proto.NewError(proto.ErrInternal, "upstream call: "+err.Error(), nil)
 	}
+	success = true
 	return resp.Result, nil
+}
+
+func (s *Supervisor) ensureToolsVerified(ctx context.Context, mg *managed, c *upstream.Client) error {
+	mg.mu.Lock()
+	if mg.verified {
+		mg.mu.Unlock()
+		return nil
+	}
+	mg.mu.Unlock()
+
+	raw := c.Tools()
+	statuses := map[string]registry.ToolReview{}
+	if s.registry != nil && len(raw) > 0 {
+		defs := make([]registry.ToolDefinition, 0, len(raw))
+		for _, t := range raw {
+			defs = append(defs, registry.ToolDefinition{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema})
+		}
+		verified, err := s.registry.VerifyToolDefinitions(ctx, mg.id, defs)
+		if err != nil {
+			return err
+		}
+		statuses = verified
+	}
+
+	tools := make([]proto.Tool, 0, len(raw))
+	blocked := map[string]registry.ToolReview{}
+	for _, t := range raw {
+		if anns, ok := mg.manifest.ToolAnnotations[t.Name]; ok {
+			t.Annotations = &proto.ToolAnnotations{ReadOnly: anns.ReadOnly, Destructive: anns.Destructive, Idempotent: anns.Idempotent}
+		}
+		if review, ok := statuses[t.Name]; ok && review.Status == registry.ToolStatusPendingReview {
+			blocked[t.Name] = review
+			s.logger.Warn("tool definition changed; blocking pending approval", "mcp", mg.id, "tool", t.Name, "approved_hash", review.ApprovedHash, "current_hash", review.CurrentHash)
+			continue
+		}
+		t.Name = mg.id + NamespaceSep + t.Name
+		tools = append(tools, t)
+	}
+
+	mg.mu.Lock()
+	mg.tools = tools
+	mg.blocked = blocked
+	mg.verified = true
+	mg.mu.Unlock()
+	return nil
 }
 
 // Close stops every running upstream.

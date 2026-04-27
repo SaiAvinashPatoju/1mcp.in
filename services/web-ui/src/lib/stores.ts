@@ -14,6 +14,9 @@ type CloudMarketplaceItem = {
 	tags: string[];
 	homepage: string;
 	license: string;
+	verification?: string;
+	sha256?: string;
+	signature?: string;
 };
 
 async function invokeDesktop<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
@@ -61,7 +64,7 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '0.6.2', runtime: 'node', author: 'Anthropic',
 		tags: ['github', 'git', 'issues', 'official'],
 		rating: 4.9, reviewCount: 634, downloads: 92800,
-		verificationStatus: 'verified', publishedAt: '2024-11-05', installed: true, patProvider: 'github'
+		verificationStatus: 'anthropic-official', publishedAt: '2024-11-05', installed: true, patProvider: 'github'
 	},
 	{
 		id: 'memory', name: 'Knowledge Graph Memory',
@@ -69,7 +72,7 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '0.6.0', runtime: 'node', author: 'Anthropic',
 		tags: ['memory', 'knowledge-graph', 'official'],
 		rating: 4.9, reviewCount: 521, downloads: 78300,
-		verificationStatus: 'verified', publishedAt: '2024-10-15', installed: true
+		verificationStatus: 'anthropic-official', publishedAt: '2024-10-15', installed: true
 	},
 	{
 		id: 'filesystem', name: 'Filesystem',
@@ -77,7 +80,7 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '0.6.2', runtime: 'node', author: 'Anthropic',
 		tags: ['filesystem', 'files', 'official'],
 		rating: 4.8, reviewCount: 312, downloads: 45200,
-		verificationStatus: 'verified', publishedAt: '2024-11-01', installed: false
+		verificationStatus: 'anthropic-official', publishedAt: '2024-11-01', installed: false
 	},
 	{
 		id: 'fetch', name: 'Fetch',
@@ -85,7 +88,7 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '0.6.0', runtime: 'python', author: 'Anthropic',
 		tags: ['http', 'fetch', 'web', 'official'],
 		rating: 4.7, reviewCount: 188, downloads: 31000,
-		verificationStatus: 'verified', publishedAt: '2024-10-20', installed: false
+		verificationStatus: 'anthropic-official', publishedAt: '2024-10-20', installed: false
 	},
 	{
 		id: 'git', name: 'Git',
@@ -93,7 +96,7 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '0.6.0', runtime: 'python', author: 'Anthropic',
 		tags: ['git', 'vcs', 'official'],
 		rating: 4.6, reviewCount: 143, downloads: 22100,
-		verificationStatus: 'verified', publishedAt: '2024-10-25', installed: false
+		verificationStatus: 'anthropic-official', publishedAt: '2024-10-25', installed: false
 	},
 	{
 		id: 'postgres', name: 'PostgreSQL',
@@ -101,7 +104,7 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '1.0.0', runtime: 'node', author: 'db-tools',
 		tags: ['database', 'postgres', 'sql'],
 		rating: 4.5, reviewCount: 119, downloads: 17600,
-		verificationStatus: 'verified', publishedAt: '2025-02-10', installed: false
+		verificationStatus: 'onemcp-verified', publishedAt: '2025-02-10', installed: false
 	},
 	{
 		id: 'slack', name: 'Slack',
@@ -109,7 +112,7 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '1.2.0', runtime: 'node', author: 'community',
 		tags: ['slack', 'messaging', 'communication'],
 		rating: 4.2, reviewCount: 87, downloads: 9400,
-		verificationStatus: 'unverified', publishedAt: '2025-01-12', installed: false
+		verificationStatus: 'community', publishedAt: '2025-01-12', installed: false
 	},
 	{
 		id: 'jira', name: 'Jira',
@@ -125,7 +128,7 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '0.3.0', runtime: 'node', author: 'linear-community',
 		tags: ['linear', 'project-management', 'issues'],
 		rating: 4.1, reviewCount: 38, downloads: 4200,
-		verificationStatus: 'unverified', publishedAt: '2025-04-01', installed: false,
+		verificationStatus: 'community', publishedAt: '2025-04-01', installed: false,
 		patProvider: 'linear'
 	}
 ]);
@@ -168,7 +171,7 @@ export const clients = writable<ClientApp[]>([
 		id: 'codex',
 		name: 'Codex',
 		icon: '🔮',
-		description: 'Codex AI Assistant integration',
+		description: 'Codex AI Assistant — auto-configure mcp.json',
 		connected: false,
 		connectCommand: 'connect codex'
 	},
@@ -176,7 +179,7 @@ export const clients = writable<ClientApp[]>([
 		id: 'antigravity',
 		name: 'Antigravity',
 		icon: '🚀',
-		description: 'Antigravity agent integration',
+		description: 'Antigravity agent integration — manual config for now',
 		connected: false,
 		connectCommand: 'connect antigravity'
 	},
@@ -184,7 +187,7 @@ export const clients = writable<ClientApp[]>([
 		id: 'opencode',
 		name: 'OpenCode',
 		icon: '📖',
-		description: 'OpenCode open-source IDE integration',
+		description: 'OpenCode open-source IDE — auto-configure opencode.json',
 		connected: false,
 		connectCommand: 'connect opencode'
 	}
@@ -260,7 +263,7 @@ export async function fetchMarketplace() {
 						rating: 4.5,
 						reviewCount: 0,
 						downloads: 0,
-						verificationStatus: 'unverified' as const,
+						verificationStatus: 'community' as const,
 						publishedAt: new Date().toISOString().slice(0, 10),
 						installed: false,
 					}),
@@ -271,6 +274,9 @@ export async function fetchMarketplace() {
 					runtime: apiItem.runtime as typeof local[number]['runtime'],
 					tags: apiItem.tags ?? [],
 					author: existing?.author ?? 'community',
+					verificationStatus: (apiItem.verification as typeof local[number]['verificationStatus']) ?? existing?.verificationStatus ?? 'community',
+					sha256: apiItem.sha256,
+					signature: apiItem.signature,
 				});
 				byId.delete(apiItem.id); // mark as processed
 			}

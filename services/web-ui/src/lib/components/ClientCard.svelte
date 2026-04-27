@@ -11,11 +11,13 @@
 	let showManual = false;
 
 	const manualInstructions: Record<string, string> = {
-		vscode: '1. Open VS Code Settings (JSON)\n2. Add under "mcp.servers":\n   "1mcp": { "command": "centralmcpd", "args": ["--db", "<path-to-db>"] }',
-		cursor: '1. Create/edit ~/.cursor/mcp.json\n2. Add under "mcpServers":\n   "1mcp": { "command": "centralmcpd", "args": ["--db", "<path-to-db>"] }',
-		claude: '1. Open Claude Desktop → Settings → Developer → Edit Config\n2. Add under "mcpServers":\n   "1mcp": { "command": "centralmcpd", "args": ["--db", "<path-to-db>"] }',
-		claudecode: '1. Edit ~/.claude.json\n2. Add under "mcpServers":\n   "1mcp": { "command": "centralmcpd", "args": ["--db", "<path-to-db>"] }',
-		codex: '1. Edit ~/.codex/mcp.json\n2. Add under "mcpServers":\n   "1mcp": { "command": "centralmcpd", "args": ["--db", "<path-to-db>"] }',
+		vscode: '1. Run "MCP: Open User Configuration" in VS Code\n2. Add under "servers":\n   "1mcp": { "command": "<absolute-path-to-centralmcpd>", "args": ["--db", "<path-to-db>"] }',
+		cursor: '1. Create/edit ~/.cursor/mcp.json\n2. Add under "mcpServers":\n   "1mcp": { "command": "<absolute-path-to-centralmcpd>", "args": ["--db", "<path-to-db>"] }',
+		claude: '1. Open Claude Desktop → Settings → Developer → Edit Config\n2. Add under "mcpServers":\n   "1mcp": { "command": "<absolute-path-to-centralmcpd>", "args": ["--db", "<path-to-db>"] }',
+		claudecode: '1. Edit ~/.claude.json\n2. Add under "mcpServers":\n   "1mcp": { "command": "<absolute-path-to-centralmcpd>", "args": ["--db", "<path-to-db>"] }',
+		windsurf: '1. Edit ~/.codeium/windsurf/mcp_config.json\n2. Add under "mcpServers":\n   "1mcp": { "command": "<absolute-path-to-centralmcpd>", "args": ["--db", "<path-to-db>"] }',
+		codex: '1. Edit ~/.codex/mcp.json\n2. Add under "mcpServers":\n   "1mcp": { "command": "<absolute-path-to-centralmcpd>", "args": ["--db", "<path-to-db>"] }',
+		opencode: '1. Edit ~/.config/opencode/opencode.json\n2. Add under "mcp":\n   "1mcp": { "type": "local", "command": ["<absolute-path-to-centralmcpd>", "--db", "<path-to-db>"], "enabled": true }',
 	};
 
 	async function handleSetup() {

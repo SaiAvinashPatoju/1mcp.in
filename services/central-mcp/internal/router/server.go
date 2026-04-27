@@ -15,6 +15,7 @@ import (
 
 	"github.com/onemcp/central-mcp/internal/framing"
 	"github.com/onemcp/central-mcp/internal/proto"
+	"github.com/onemcp/central-mcp/internal/security"
 	"github.com/onemcp/central-mcp/internal/supervisor"
 )
 
@@ -69,26 +70,32 @@ func (s *Server) Run(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s.dispatch(ctx, &msg)
+			if resp := s.Handle(ctx, &msg); resp != nil {
+				if err := s.out.Write(resp); err != nil {
+					s.logger.Error("write response", "err", err)
+				}
+			}
 		}()
 	}
 }
 
-func (s *Server) dispatch(ctx context.Context, msg *proto.Message) {
+func (s *Server) Handle(ctx context.Context, msg *proto.Message) *proto.Message {
 	switch {
 	case msg.IsRequest():
-		s.handleRequest(ctx, msg)
+		return s.handleRequest(ctx, msg)
 	case msg.IsNotification():
 		// notifications/initialized and friends acknowledged silently in MVP.
+		return nil
 	default:
 		s.logger.Warn("unexpected message shape", "method", msg.Method)
+		return nil
 	}
 }
 
-func (s *Server) handleRequest(ctx context.Context, msg *proto.Message) {
+func (s *Server) handleRequest(ctx context.Context, msg *proto.Message) *proto.Message {
 	switch msg.Method {
 	case "initialize":
-		s.replyOK(msg.ID, proto.InitializeResult{
+		return s.ok(msg.ID, proto.InitializeResult{
 			ProtocolVersion: proto.ProtocolVersion,
 			ServerInfo:      proto.Implementation{Name: "onemcp", Version: "0.1.0"},
 			Capabilities: proto.ServerCapabilities{
@@ -96,77 +103,73 @@ func (s *Server) handleRequest(ctx context.Context, msg *proto.Message) {
 			},
 		})
 	case "tools/list":
-		s.replyOK(msg.ID, proto.ListToolsResult{Tools: s.sup.Tools()})
+		return s.ok(msg.ID, proto.ListToolsResult{Tools: s.sup.Tools()})
 	case "tools/call":
-		s.handleToolsCall(ctx, msg)
+		return s.handleToolsCall(ctx, msg)
 	case "onemcp/rankTools":
-		s.handleRankTools(msg)
+		return s.handleRankTools(msg)
 	case "ping":
-		s.replyOK(msg.ID, struct{}{})
+		return s.ok(msg.ID, struct{}{})
 	default:
-		s.replyErr(msg.ID, proto.NewError(proto.ErrMethodNotFound, "method not supported in MVP: "+msg.Method, nil))
+		return s.err(msg.ID, proto.NewError(proto.ErrMethodNotFound, "method not supported: "+msg.Method, nil))
 	}
 }
 
-func (s *Server) handleToolsCall(ctx context.Context, msg *proto.Message) {
+func (s *Server) handleToolsCall(ctx context.Context, msg *proto.Message) *proto.Message {
 	var p proto.CallToolParams
 	if err := json.Unmarshal(msg.Params, &p); err != nil {
-		s.replyErr(msg.ID, proto.NewError(proto.ErrInvalidParams, "invalid tools/call params", err.Error()))
-		return
+		return s.err(msg.ID, proto.NewError(proto.ErrInvalidParams, "invalid tools/call params", err.Error()))
 	}
 	result, rpcErr := s.sup.Call(ctx, p.Name, p.Arguments)
 	if rpcErr != nil {
-		s.replyErr(msg.ID, rpcErr)
-		return
+		return s.err(msg.ID, rpcErr)
 	}
-	s.replyRaw(msg.ID, result)
+	return s.raw(msg.ID, result)
 }
 
-func (s *Server) replyOK(id *proto.ID, v any) {
+func (s *Server) ok(id *proto.ID, v any) *proto.Message {
 	b, err := json.Marshal(v)
 	if err != nil {
-		s.replyErr(id, proto.NewError(proto.ErrInternal, "marshal result", err.Error()))
-		return
+		return s.err(id, proto.NewError(proto.ErrInternal, "marshal result", err.Error()))
 	}
-	s.replyRaw(id, b)
+	return s.raw(id, b)
 }
 
-func (s *Server) replyRaw(id *proto.ID, result json.RawMessage) {
+func (s *Server) raw(id *proto.ID, result json.RawMessage) *proto.Message {
 	if id == nil {
-		return
+		return nil
 	}
-	resp := proto.Message{JSONRPC: proto.Version, ID: id, Result: result}
-	if err := s.out.Write(&resp); err != nil {
-		s.logger.Error("write response", "err", err)
-	}
+	return &proto.Message{JSONRPC: proto.Version, ID: id, Result: result}
 }
 
-func (s *Server) replyErr(id *proto.ID, e *proto.RPCError) {
+func (s *Server) err(id *proto.ID, e *proto.RPCError) *proto.Message {
 	if id == nil {
-		return
+		return nil
 	}
-	resp := proto.Message{JSONRPC: proto.Version, ID: id, Error: e}
-	if err := s.out.Write(&resp); err != nil {
-		s.logger.Error("write error response", "err", err)
+	if e != nil {
+		e.Message = security.RedactString(e.Message)
+		if len(e.Data) > 0 {
+			e.Data = security.RedactJSON(e.Data)
+		}
 	}
+	return &proto.Message{JSONRPC: proto.Version, ID: id, Error: e}
 }
 
 // handleRankTools is OneMCP's custom MCP extension for semantic tool surfacing.
 // Clients pass {query, k}; we return top-k full Tool entries by relevance.
 // Phase 8+ publishes this through the OneMCP SDK so non-VS Code clients can opt in.
-func (s *Server) handleRankTools(msg *proto.Message) {
+func (s *Server) handleRankTools(msg *proto.Message) *proto.Message {
 	var p struct {
 		Query string `json:"query"`
 		K     int    `json:"k"`
 	}
 	if err := json.Unmarshal(msg.Params, &p); err != nil {
-		s.replyErr(msg.ID, proto.NewError(proto.ErrInvalidParams, "invalid params", err.Error()))
-		return
+		return s.err(msg.ID, proto.NewError(proto.ErrInvalidParams, "invalid params", err.Error()))
 	}
 	if p.K <= 0 {
 		p.K = 5
 	}
-	s.replyOK(msg.ID, struct {
+	return s.ok(msg.ID, struct {
 		Tools []proto.Tool `json:"tools"`
 	}{Tools: s.sup.RankTools(p.Query, p.K)})
 }

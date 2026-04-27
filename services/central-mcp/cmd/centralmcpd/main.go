@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -20,11 +21,13 @@ import (
 	"time"
 
 	"github.com/onemcp/central-mcp/internal/manifest"
+	"github.com/onemcp/central-mcp/internal/observability"
 	"github.com/onemcp/central-mcp/internal/paths"
 	"github.com/onemcp/central-mcp/internal/registry"
 	"github.com/onemcp/central-mcp/internal/router"
 	"github.com/onemcp/central-mcp/internal/secrets"
 	"github.com/onemcp/central-mcp/internal/supervisor"
+	transporthttp "github.com/onemcp/central-mcp/internal/transport"
 )
 
 // fileConfig is the dev-mode JSON config: a flat list of inline manifests
@@ -35,9 +38,13 @@ type fileConfig struct {
 
 func main() {
 	var (
-		configPath = flag.String("config", "", "path to dev JSON config (overrides --db when set)")
-		dbPath     = flag.String("db", "", "path to registry SQLite db (default: paths.RegistryDB)")
-		logLevel   = flag.String("log", "info", "log level: debug|info|warn|error")
+		configPath  = flag.String("config", "", "path to dev JSON config (overrides --db when set)")
+		dbPath      = flag.String("db", "", "path to registry SQLite db (default: paths.RegistryDB)")
+		logLevel    = flag.String("log", "info", "log level: debug|info|warn|error")
+		transport   = flag.String("transport", "stdio", "client transport: stdio|http")
+		listenAddr  = flag.String("listen", "127.0.0.1:3000", "HTTP transport listen address")
+		metricsAddr = flag.String("metrics-addr", "127.0.0.1:3031", "Prometheus metrics listen address; empty disables standalone metrics server")
+		httpToken   = flag.String("http-token", os.Getenv("ONEMCP_HTTP_TOKEN"), "bearer token required for HTTP transport; defaults to ONEMCP_HTTP_TOKEN")
 	)
 	flag.Parse()
 
@@ -55,7 +62,8 @@ func main() {
 		cancel()
 	}()
 
-	sup, err := buildSupervisor(ctx, *configPath, *dbPath, logger)
+	metrics := observability.NewMetrics()
+	sup, err := buildSupervisor(ctx, *configPath, *dbPath, logger, metrics)
 	if err != nil {
 		logger.Error("build supervisor", "err", err)
 		os.Exit(1)
@@ -68,16 +76,30 @@ func main() {
 	sup.Start(warmupCtx)
 	warmupCancel()
 
+	if *metricsAddr != "" && *transport != "http" {
+		go serveStandaloneMetrics(ctx, *metricsAddr, metrics, logger)
+	}
+
 	srv := router.New(os.Stdin, os.Stdout, sup, logger)
-	if err := srv.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		logger.Error("router exited", "err", err)
+	var runErr error
+	switch *transport {
+	case "stdio":
+		runErr = srv.Run(ctx)
+	case "http":
+		runErr = transporthttp.ServeHTTP(ctx, srv, transporthttp.HTTPOptions{Addr: *listenAddr, AuthToken: *httpToken, Logger: logger, Metrics: metrics})
+	default:
+		logger.Error("invalid transport", "transport", *transport)
+		os.Exit(2)
+	}
+	if runErr != nil && !errors.Is(runErr, context.Canceled) {
+		logger.Error("router exited", "err", runErr)
 		os.Exit(1)
 	}
 }
 
-func buildSupervisor(ctx context.Context, configPath, dbFlag string, logger *slog.Logger) (*supervisor.Supervisor, error) {
+func buildSupervisor(ctx context.Context, configPath, dbFlag string, logger *slog.Logger, metrics *observability.Metrics) (*supervisor.Supervisor, error) {
 	if configPath != "" {
-		return buildFromConfig(configPath, logger)
+		return buildFromConfig(configPath, logger, metrics)
 	}
 	dbPath := dbFlag
 	if dbPath == "" {
@@ -87,10 +109,10 @@ func buildSupervisor(ctx context.Context, configPath, dbFlag string, logger *slo
 		}
 		dbPath = p
 	}
-	return buildFromDB(ctx, dbPath, logger)
+	return buildFromDB(ctx, dbPath, logger, metrics)
 }
 
-func buildFromConfig(path string, logger *slog.Logger) (*supervisor.Supervisor, error) {
+func buildFromConfig(path string, logger *slog.Logger, metrics *observability.Metrics) (*supervisor.Supervisor, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
@@ -123,10 +145,10 @@ func buildFromConfig(path string, logger *slog.Logger) (*supervisor.Supervisor, 
 			return m, nil
 		}
 		return nil, fmt.Errorf("manifest for %s not found", id)
-	}, nil, supervisor.Options{Logger: logger})
+	}, nil, supervisor.Options{Logger: logger, Metrics: metrics})
 }
 
-func buildFromDB(ctx context.Context, dbPath string, logger *slog.Logger) (*supervisor.Supervisor, error) {
+func buildFromDB(ctx context.Context, dbPath string, logger *slog.Logger, metrics *observability.Metrics) (*supervisor.Supervisor, error) {
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir registry dir: %w", err)
 	}
@@ -160,7 +182,23 @@ func buildFromDB(ctx context.Context, dbPath string, logger *slog.Logger) (*supe
 		}
 		return manifest.Parse(manifestJSON)
 	}
-	return supervisor.New(entries, getManifest, sec, supervisor.Options{Logger: logger})
+	return supervisor.New(entries, getManifest, sec, supervisor.Options{Logger: logger, Registry: db, Metrics: metrics})
+}
+
+func serveStandaloneMetrics(ctx context.Context, addr string, metrics *observability.Metrics, logger *slog.Logger) {
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", metrics.Handler())
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
+	logger.Info("metrics endpoint ready", "addr", addr, "path", "/metrics")
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logger.Warn("metrics endpoint stopped", "err", err)
+	}
 }
 
 func pickCommand(m *manifest.Manifest) string {

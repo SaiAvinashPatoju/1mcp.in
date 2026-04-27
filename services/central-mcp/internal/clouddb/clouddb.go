@@ -44,22 +44,34 @@ CREATE TABLE IF NOT EXISTS marketplace_items (
     tags         TEXT NOT NULL DEFAULT '[]',
     homepage     TEXT NOT NULL DEFAULT '',
     license      TEXT NOT NULL DEFAULT '',
+	verification TEXT NOT NULL DEFAULT 'community',
+	sha256       TEXT NOT NULL DEFAULT '',
+	signature    TEXT NOT NULL DEFAULT '',
     published_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 `
 
+const marketplaceTrustMigration = `
+ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS verification TEXT NOT NULL DEFAULT 'community';
+ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS sha256 TEXT NOT NULL DEFAULT '';
+ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS signature TEXT NOT NULL DEFAULT '';
+`
+
 // MarketplaceItem is a row in marketplace_items. Tags is a JSON array string.
 type MarketplaceItem struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Version     string   `json:"version"`
-	Runtime     string   `json:"runtime"`
-	AuthorEmail string   `json:"author_email,omitempty"`
-	Tags        []string `json:"tags"`
-	Homepage    string   `json:"homepage,omitempty"`
-	License     string   `json:"license,omitempty"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Version      string   `json:"version"`
+	Runtime      string   `json:"runtime"`
+	AuthorEmail  string   `json:"author_email,omitempty"`
+	Tags         []string `json:"tags"`
+	Homepage     string   `json:"homepage,omitempty"`
+	License      string   `json:"license,omitempty"`
+	Verification string   `json:"verification,omitempty"`
+	SHA256       string   `json:"sha256,omitempty"`
+	Signature    string   `json:"signature,omitempty"`
 }
 
 // User is a registered account row.
@@ -102,6 +114,9 @@ func (d *DB) Close() { d.pool.Close() }
 func (d *DB) migrate(ctx context.Context) error {
 	if _, err := d.pool.Exec(ctx, schema); err != nil {
 		return fmt.Errorf("clouddb: migrate: %w", err)
+	}
+	if _, err := d.pool.Exec(ctx, marketplaceTrustMigration); err != nil {
+		return fmt.Errorf("clouddb: trust migrate: %w", err)
 	}
 	return nil
 }
@@ -189,8 +204,8 @@ func (d *DB) UpsertMarketplaceItems(ctx context.Context, items []MarketplaceItem
 	for _, item := range items {
 		tagsJSON, _ := json.Marshal(item.Tags)
 		_, err := d.pool.Exec(ctx, `
-			INSERT INTO marketplace_items (id, name, description, version, runtime, author_email, tags, homepage, license, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+			INSERT INTO marketplace_items (id, name, description, version, runtime, author_email, tags, homepage, license, verification, sha256, signature, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
 			ON CONFLICT (id) DO UPDATE SET
 				name         = EXCLUDED.name,
 				description  = EXCLUDED.description,
@@ -199,9 +214,12 @@ func (d *DB) UpsertMarketplaceItems(ctx context.Context, items []MarketplaceItem
 				tags         = EXCLUDED.tags,
 				homepage     = EXCLUDED.homepage,
 				license      = EXCLUDED.license,
+				verification = EXCLUDED.verification,
+				sha256       = EXCLUDED.sha256,
+				signature    = EXCLUDED.signature,
 				updated_at   = now()`,
 			item.ID, item.Name, item.Description, item.Version, item.Runtime,
-			item.AuthorEmail, string(tagsJSON), item.Homepage, item.License,
+			item.AuthorEmail, string(tagsJSON), item.Homepage, item.License, item.Verification, item.SHA256, item.Signature,
 		)
 		if err != nil {
 			return fmt.Errorf("clouddb: upsert marketplace item %s: %w", item.ID, err)
@@ -213,7 +231,7 @@ func (d *DB) UpsertMarketplaceItems(ctx context.Context, items []MarketplaceItem
 // GetMarketplaceItems returns all marketplace items ordered by name.
 func (d *DB) GetMarketplaceItems(ctx context.Context) ([]MarketplaceItem, error) {
 	rows, err := d.pool.Query(ctx, `
-		SELECT id, name, description, version, runtime, author_email, tags, homepage, license
+		SELECT id, name, description, version, runtime, author_email, tags, homepage, license, verification, sha256, signature
 		FROM marketplace_items
 		ORDER BY name`)
 	if err != nil {
@@ -226,7 +244,7 @@ func (d *DB) GetMarketplaceItems(ctx context.Context) ([]MarketplaceItem, error)
 		var item MarketplaceItem
 		var tagsJSON string
 		if err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Version,
-			&item.Runtime, &item.AuthorEmail, &tagsJSON, &item.Homepage, &item.License); err != nil {
+			&item.Runtime, &item.AuthorEmail, &tagsJSON, &item.Homepage, &item.License, &item.Verification, &item.SHA256, &item.Signature); err != nil {
 			return nil, fmt.Errorf("clouddb: scan marketplace item: %w", err)
 		}
 		_ = json.Unmarshal([]byte(tagsJSON), &item.Tags)

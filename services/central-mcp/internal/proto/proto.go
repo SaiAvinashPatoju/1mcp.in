@@ -120,6 +120,13 @@ type Tool struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	InputSchema json.RawMessage `json:"inputSchema"`
+	Annotations *ToolAnnotations `json:"annotations,omitempty"`
+}
+
+type ToolAnnotations struct {
+	ReadOnly    bool `json:"readOnly,omitempty"`
+	Destructive bool `json:"destructive,omitempty"`
+	Idempotent  bool `json:"idempotent,omitempty"`
 }
 
 type ListToolsResult struct {

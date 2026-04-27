@@ -1,4 +1,6 @@
 /bin/
+/oss/
+/CLAUDE.md
 *.exe
 *.db
 *.db-journal

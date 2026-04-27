@@ -1,6 +1,6 @@
 export type Runtime = 'node' | 'python' | 'go' | 'binary';
 export type PatProvider = 'github' | 'gitlab' | 'linear' | 'custom';
-export type VerificationStatus = 'verified' | 'unverified' | 'pending';
+export type VerificationStatus = 'anthropic-official' | 'onemcp-verified' | 'community' | 'pending' | 'verified' | 'unverified';
 
 export interface User {
 	id: string;
@@ -31,6 +31,8 @@ export interface MarketplaceMcp {
 	reviewCount: number;
 	downloads: number;
 	verificationStatus: VerificationStatus;
+	sha256?: string;
+	signature?: string;
 	publishedAt: string;
 	installed: boolean;
 	patProvider?: PatProvider;

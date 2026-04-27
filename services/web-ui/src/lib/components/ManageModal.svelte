@@ -41,7 +41,7 @@
 				<h2 class="text-sm font-semibold text-white/90">{mcp.name}</h2>
 				<p class="text-xs text-white/30 mt-0.5">v{mcp.version} · {mcp.runtime}</p>
 			</div>
-			<button on:click={onClose} class="w-8 h-8 flex items-center justify-center rounded-lg text-white/30 hover:text-white/80 hover:bg-white/[0.06] transition-colors">
+			<button type="button" aria-label="Close modal" on:click={onClose} class="w-8 h-8 flex items-center justify-center rounded-lg text-white/30 hover:text-white/80 hover:bg-white/[0.06] transition-colors">
 				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
 			</button>
 		</div>
@@ -58,7 +58,7 @@
 						<p class="text-xs text-white/30 mt-0.5">{localEnabled ? 'Server is active and routing traffic' : 'Server is paused'}</p>
 					</div>
 				</div>
-				<button on:click={handleToggle} class="relative w-11 h-6 rounded-full transition-colors flex-shrink-0" style="background: {localEnabled ? '#7c3aed' : '#2a2a3a'}">
+				<button type="button" aria-label="Toggle server" on:click={handleToggle} class="relative w-11 h-6 rounded-full transition-colors flex-shrink-0" style="background: {localEnabled ? '#7c3aed' : '#2a2a3a'}">
 					<span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm" style="left: {localEnabled ? '1.375rem' : '0.25rem'}"></span>
 				</button>
 			</div>
@@ -93,7 +93,7 @@
 							placeholder={provider.placeholder}
 							class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 placeholder-white/20 focus:outline-none focus:border-violet-500 transition-colors pr-10"
 						/>
-						<button type="button" on:click={() => (showToken = !showToken)} class="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/70">
+						<button type="button" aria-label={showToken ? 'Hide token' : 'Show token'} on:click={() => (showToken = !showToken)} class="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/70">
 							{#if showToken}
 								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
 							{:else}

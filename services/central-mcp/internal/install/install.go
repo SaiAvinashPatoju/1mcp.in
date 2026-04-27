@@ -26,10 +26,11 @@ import (
 
 // Result reports what happened during an install (for CLI/UI display).
 type Result struct {
-	ID       string
-	Already  bool   // already installed; this was a re-install
-	Warning  string // non-fatal message (e.g. docker daemon unreachable)
-	Duration time.Duration
+	ID           string
+	Already      bool   // already installed; this was a re-install
+	Verification string // marketplace trust class verified before install
+	Warning      string // non-fatal message (e.g. docker daemon unreachable)
+	Duration     time.Duration
 }
 
 // Installer is the unit-of-work for install/uninstall flows. It deliberately
@@ -47,6 +48,9 @@ func (i *Installer) Install(ctx context.Context, m *manifest.Manifest) (*Result,
 	if err := m.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid manifest: %w", err)
 	}
+	if err := manifest.VerifyCatalogDigest(m); err != nil {
+		return nil, fmt.Errorf("supply-chain verification failed: %w", err)
+	}
 
 	// Preserve any existing env so re-install of an already-configured MCP
 	// doesn't drop the user's settings.
@@ -57,7 +61,7 @@ func (i *Installer) Install(ctx context.Context, m *manifest.Manifest) (*Result,
 		already = true
 	}
 
-	res := &Result{ID: m.ID, Already: already}
+	res := &Result{ID: m.ID, Already: already, Verification: m.Verification}
 
 	// Docker pre-pull, best-effort.
 	if m.Runtime == "docker" {

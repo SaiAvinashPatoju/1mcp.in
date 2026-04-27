@@ -49,6 +49,10 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
+	issuer := os.Getenv("OAUTH_ISSUER")
+	if issuer == "" {
+		issuer = "http://localhost:" + port
+	}
 
 	ctx := context.Background()
 	db, err := clouddb.Open(ctx, dsn)
@@ -67,6 +71,7 @@ func main() {
 	mux.HandleFunc("POST /api/auth/register", handleRegister(db))
 	mux.HandleFunc("POST /api/auth/login", handleLogin(db))
 	mux.HandleFunc("GET /api/auth/me", handleMe(db))
+	registerOAuthHandlers(mux, newOAuthStore(), strings.TrimRight(issuer, "/"))
 
 	// Seed marketplace from embedded registry-index on startup
 	if err := seedMarketplace(ctx, db); err != nil {

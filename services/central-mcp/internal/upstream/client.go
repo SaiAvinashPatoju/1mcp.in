@@ -19,6 +19,7 @@ import (
 
 	"github.com/onemcp/central-mcp/internal/framing"
 	"github.com/onemcp/central-mcp/internal/proto"
+	"github.com/onemcp/central-mcp/internal/security"
 )
 
 // Spec describes how to launch a child MCP. Mirrors a subset of the manifest
@@ -137,7 +138,7 @@ func (c *Client) drainStderr(r io.ReadCloser) {
 			return
 		}
 		if len(line) > 0 {
-			c.logger.Debug("child stderr", "line", string(line))
+			c.logger.Debug("child stderr", "line", security.RedactString(string(line)))
 		}
 	}
 }
@@ -176,7 +177,7 @@ func (c *Client) readLoop() {
 		}
 		var msg proto.Message
 		if err := json.Unmarshal(raw, &msg); err != nil {
-			c.logger.Warn("decode upstream message", "err", err, "raw", truncate(raw, 256))
+			c.logger.Warn("decode upstream message", "err", err, "raw", security.RedactString(truncate(raw, 256)))
 			continue
 		}
 		// Notifications from the child are ignored for Phase 1 (no listChanged

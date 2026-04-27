@@ -52,7 +52,7 @@
 	<div class="w-full max-w-lg bg-[#12121a] border border-white/[0.06] rounded-2xl shadow-2xl">
 		<div class="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
 			<h2 class="text-sm font-semibold text-white/90">Publish MCP Server</h2>
-			<button on:click={onClose} class="w-8 h-8 flex items-center justify-center rounded-lg text-white/30 hover:text-white/80 hover:bg-white/[0.06] transition-colors">
+			<button type="button" aria-label="Close publish modal" on:click={onClose} class="w-8 h-8 flex items-center justify-center rounded-lg text-white/30 hover:text-white/80 hover:bg-white/[0.06] transition-colors">
 				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
 			</button>
 		</div>
@@ -102,21 +102,21 @@
 			{:else if step === 1}
 				<div class="space-y-4">
 					<div>
-						<label class="block text-xs font-medium text-white/30 mb-1.5">Name *</label>
-						<input bind:value={name} placeholder="My MCP Server" class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 placeholder-white/20 focus:outline-none focus:border-violet-500 transition-colors" />
+						<label class="block text-xs font-medium text-white/30 mb-1.5" for="publish-name">Name *</label>
+						<input id="publish-name" bind:value={name} placeholder="My MCP Server" class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 placeholder-white/20 focus:outline-none focus:border-violet-500 transition-colors" />
 					</div>
 					<div>
-						<label class="block text-xs font-medium text-white/30 mb-1.5">Description *</label>
-						<textarea bind:value={description} placeholder="What does your MCP server do?" rows="3" class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 placeholder-white/20 focus:outline-none focus:border-violet-500 transition-colors resize-none"></textarea>
+						<label class="block text-xs font-medium text-white/30 mb-1.5" for="publish-description">Description *</label>
+						<textarea id="publish-description" bind:value={description} placeholder="What does your MCP server do?" rows="3" class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 placeholder-white/20 focus:outline-none focus:border-violet-500 transition-colors resize-none"></textarea>
 					</div>
 					<div class="flex gap-3">
 						<div class="flex-1">
-							<label class="block text-xs font-medium text-white/30 mb-1.5">Version *</label>
-							<input bind:value={version} placeholder="1.0.0" class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 placeholder-white/20 focus:outline-none focus:border-violet-500 transition-colors" />
+							<label class="block text-xs font-medium text-white/30 mb-1.5" for="publish-version">Version *</label>
+							<input id="publish-version" bind:value={version} placeholder="1.0.0" class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 placeholder-white/20 focus:outline-none focus:border-violet-500 transition-colors" />
 						</div>
 						<div class="flex-1">
-							<label class="block text-xs font-medium text-white/30 mb-1.5">Runtime *</label>
-							<select bind:value={runtime} class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 focus:outline-none focus:border-violet-500 transition-colors">
+							<label class="block text-xs font-medium text-white/30 mb-1.5" for="publish-runtime">Runtime *</label>
+							<select id="publish-runtime" bind:value={runtime} class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 focus:outline-none focus:border-violet-500 transition-colors">
 								<option value="node">Node.js</option>
 								<option value="python">Python</option>
 								<option value="go">Go</option>
@@ -125,16 +125,16 @@
 						</div>
 					</div>
 					<div>
-						<label class="block text-xs font-medium text-white/30 mb-1.5">Tags</label>
+						<label class="block text-xs font-medium text-white/30 mb-1.5" for="publish-tags">Tags</label>
 						<div class="flex gap-2 mb-2">
-							<input bind:value={tagInput} on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }} placeholder="e.g. database, sql" class="flex-1 bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 placeholder-white/20 focus:outline-none focus:border-violet-500 transition-colors" />
-							<button on:click={addTag} class="px-3 py-2 rounded-lg bg-white/[0.04] text-white/40 hover:text-white/80 text-xs border border-white/[0.06]">Add</button>
+							<input id="publish-tags" bind:value={tagInput} on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }} placeholder="e.g. database, sql" class="flex-1 bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/80 placeholder-white/20 focus:outline-none focus:border-violet-500 transition-colors" />
+							<button type="button" on:click={addTag} class="px-3 py-2 rounded-lg bg-white/[0.04] text-white/40 hover:text-white/80 text-xs border border-white/[0.06]">Add</button>
 						</div>
 						<div class="flex flex-wrap gap-1.5">
 							{#each tags as tag}
 								<span class="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-violet-900/30 text-violet-400 border border-violet-800/50">
 									#{tag}
-									<button on:click={() => (tags = tags.filter((t) => t !== tag))} class="hover:text-white">×</button>
+									<button type="button" aria-label={`Remove ${tag} tag`} on:click={() => (tags = tags.filter((t) => t !== tag))} class="hover:text-white">×</button>
 								</span>
 							{/each}
 						</div>

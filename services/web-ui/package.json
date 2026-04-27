@@ -1,11 +1,12 @@
 {
-  "name": "mach1-ui",
+  "name": "onemcp-ui",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.2.4",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "prepare:router": "node ./scripts/prepare-router.mjs",
+    "build": "npm run prepare:router && vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "tauri": "tauri"

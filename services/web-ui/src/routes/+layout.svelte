@@ -6,6 +6,7 @@
 	import UpdateBanner from '$lib/components/UpdateBanner.svelte';
 	import { browser } from '$app/environment';
 	import { onMount, afterUpdate, onDestroy } from 'svelte';
+	import { listen } from '@tauri-apps/api/event';
 	import { startUserCounter, fetchMarketplace } from '$lib/stores';
 	
 	const isTauri = browser && '__TAURI_INTERNALS__' in window;
@@ -56,7 +57,6 @@
 
 		if (isTauri) {
 			try {
-				const { listen } = await import('@tauri-apps/api/event');
 				const unlisten = await listen<{ source: string; message: string; level: string }>('log-event', (event) => {
 					const { source, message, level } = event.payload;
 					const type = level === 'error' ? 'error' : level === 'warn' ? 'warn' : level === 'success' ? 'success' : 'info';

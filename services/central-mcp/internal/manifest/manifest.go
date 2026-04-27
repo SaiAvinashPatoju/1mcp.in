@@ -16,22 +16,26 @@ var (
 
 // Manifest mirrors manifest.schema.json. JSON tags must match exactly.
 type Manifest struct {
-	ID            string         `json:"id"`
-	Name          string         `json:"name"`
-	Version       string         `json:"version"`
-	Description   string         `json:"description,omitempty"`
-	Homepage      string         `json:"homepage,omitempty"`
-	Author        string         `json:"author,omitempty"`
-	License       string         `json:"license,omitempty"`
-	Tags          []string       `json:"tags,omitempty"`
-	Transport     string         `json:"transport"`
-	Runtime       string         `json:"runtime"`
-	Entrypoint    Entrypoint     `json:"entrypoint"`
-	EnvSchema     []EnvVar       `json:"envSchema,omitempty"`
-	Permissions   *Permissions   `json:"permissions,omitempty"`
-	Capabilities  []string       `json:"capabilities,omitempty"`
-	EmbeddingText string         `json:"embeddingText,omitempty"`
-	Lifecycle     *Lifecycle     `json:"lifecycle,omitempty"`
+	ID              string                     `json:"id"`
+	Name            string                     `json:"name"`
+	Version         string                     `json:"version"`
+	Description     string                     `json:"description,omitempty"`
+	Homepage        string                     `json:"homepage,omitempty"`
+	Author          string                     `json:"author,omitempty"`
+	License         string                     `json:"license,omitempty"`
+	Tags            []string                   `json:"tags,omitempty"`
+	Transport       string                     `json:"transport"`
+	Runtime         string                     `json:"runtime"`
+	Entrypoint      Entrypoint                 `json:"entrypoint"`
+	EnvSchema       []EnvVar                   `json:"envSchema,omitempty"`
+	Permissions     *Permissions               `json:"permissions,omitempty"`
+	ToolAnnotations map[string]ToolAnnotations `json:"toolAnnotations,omitempty"`
+	Capabilities    []string                   `json:"capabilities,omitempty"`
+	Verification    string                     `json:"verification,omitempty"`
+	SHA256          string                     `json:"sha256,omitempty"`
+	Signature       string                     `json:"signature,omitempty"`
+	EmbeddingText   string                     `json:"embeddingText,omitempty"`
+	Lifecycle       *Lifecycle                 `json:"lifecycle,omitempty"`
 }
 
 // Entrypoint is a discriminated union: command-style OR docker-image-style.
@@ -63,8 +67,8 @@ type EnvVar struct {
 }
 
 type Permissions struct {
-	Network    bool         `json:"network,omitempty"`
-	Filesystem *FSPerms     `json:"filesystem,omitempty"`
+	Network    bool     `json:"network,omitempty"`
+	Filesystem *FSPerms `json:"filesystem,omitempty"`
 }
 
 type FSPerms struct {
@@ -75,6 +79,12 @@ type FSPerms struct {
 type Lifecycle struct {
 	IdleShutdownSeconds int  `json:"idleShutdownSeconds,omitempty"`
 	Autostart           bool `json:"autostart,omitempty"`
+}
+
+type ToolAnnotations struct {
+	ReadOnly    bool `json:"readOnly,omitempty"`
+	Destructive bool `json:"destructive,omitempty"`
+	Idempotent  bool `json:"idempotent,omitempty"`
 }
 
 // Validate enforces the structural rules of the JSON Schema. We do this in
@@ -91,9 +101,14 @@ func (m *Manifest) Validate() error {
 		return fmt.Errorf("invalid version %q", m.Version)
 	}
 	switch m.Transport {
-	case "stdio", "sse":
+	case "stdio", "sse", "http":
 	default:
 		return fmt.Errorf("invalid transport %q", m.Transport)
+	}
+	switch m.Verification {
+	case "", "anthropic-official", "onemcp-verified", "community":
+	default:
+		return fmt.Errorf("invalid verification %q", m.Verification)
 	}
 	switch m.Runtime {
 	case "node", "python", "docker", "binary":

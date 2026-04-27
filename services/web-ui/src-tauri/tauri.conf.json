@@ -1,6 +1,6 @@
 {
   "productName": "1mcp.in",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "identifier": "in.onemcp.hub",
   "build": {
     "frontendDist": "../build",
@@ -29,6 +29,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": [
+      "resources/*"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -47,7 +50,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlBNUU4MDQxMzAwODJDNjgKUldSb0xBZ3dRWUJlbXRnRTRGNWcxYkY2UEErcTdkOW1BWDFsUUw5OWpHWGM2VXZEWDlBNXdkcXQK",
       "endpoints": [
-        "https://github.com/SaiAvinashPatoju/1mcp/releases/latest/download/latest.json"
+        "https://github.com/SaiAvinashPatoju/1mcp.in/releases/latest/download/latest.json"
       ],
       "dialog": false
     },

@@ -25,8 +25,8 @@
 
     "transport": {
       "type": "string",
-      "enum": ["stdio", "sse"],
-      "description": "MVP supports stdio. sse reserved for Phase 5+."
+      "enum": ["stdio", "sse", "http"],
+      "description": "Supported MCP child transport. centralmcpd itself can expose stdio or Streamable HTTP."
     },
 
     "runtime": {
@@ -103,6 +103,37 @@
           }
         }
       }
+    },
+
+    "toolAnnotations": {
+      "type": "object",
+      "description": "Per-tool policy hints from MCP 2025-03-26: read-only, destructive, and idempotent.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "readOnly": { "type": "boolean", "default": false },
+          "destructive": { "type": "boolean", "default": false },
+          "idempotent": { "type": "boolean", "default": false }
+        }
+      }
+    },
+
+    "verification": {
+      "type": "string",
+      "enum": ["anthropic-official", "onemcp-verified", "community"],
+      "description": "Trust class shown in the marketplace. Community entries require maintainer review before release."
+    },
+
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Maintainer-pinned SHA256 over the canonical manifest with sha256/signature omitted."
+    },
+
+    "signature": {
+      "type": "string",
+      "description": "Detached maintainer signature for the canonical manifest digest. Optional until signing keys are published."
     },
 
     "capabilities": {

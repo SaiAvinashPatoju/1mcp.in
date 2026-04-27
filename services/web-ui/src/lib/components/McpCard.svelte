@@ -7,9 +7,12 @@
 	export let onUninstall: () => void;
 
 	const verificationConfig = {
+		'anthropic-official': { label: 'Anthropic Official', textClass: 'text-emerald-400', bgClass: 'bg-emerald-900/20 border-emerald-800/50' },
+		'onemcp-verified': { label: '1mcp Verified', textClass: 'text-sky-400', bgClass: 'bg-sky-900/20 border-sky-800/50' },
+		community: { label: 'Community', textClass: 'text-yellow-400', bgClass: 'bg-yellow-900/20 border-yellow-800/50' },
 		verified: { label: 'Verified', textClass: 'text-emerald-400', bgClass: 'bg-emerald-900/20 border-emerald-800/50' },
 		unverified: { label: 'Community', textClass: 'text-yellow-400', bgClass: 'bg-yellow-900/20 border-yellow-800/50' },
-		pending: { label: 'Pending', textClass: 'text-orange-400', bgClass: 'bg-orange-900/20 border-orange-800/50' }
+		pending: { label: 'Pending Review', textClass: 'text-orange-400', bgClass: 'bg-orange-900/20 border-orange-800/50' }
 	} as const;
 
 	const runtimeBadge: Record<string, string> = {

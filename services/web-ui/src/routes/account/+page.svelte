@@ -69,7 +69,7 @@
 					<p class="text-sm text-white/80">{item.label}</p>
 					<p class="text-xs text-white/30 mt-0.5">{item.sub}</p>
 				</div>
-				<button on:click={item.toggle} class="relative w-10 h-5 rounded-full transition-colors flex-shrink-0" style="background: {item.value ? '#7c3aed' : '#2a2a3a'}">
+				<button aria-label={item.label} on:click={item.toggle} class="relative w-10 h-5 rounded-full transition-colors flex-shrink-0" style="background: {item.value ? '#7c3aed' : '#2a2a3a'}">
 					<span class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow-sm" style="left: {item.value ? '1.375rem' : '0.125rem'}"></span>
 				</button>
 			</div>

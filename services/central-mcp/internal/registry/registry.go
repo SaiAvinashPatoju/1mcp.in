@@ -8,10 +8,13 @@ package registry
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -32,6 +35,17 @@ CREATE TABLE IF NOT EXISTS installed_mcps (
     manifest_json TEXT NOT NULL,
     installed_at  INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS tool_definition_hashes (
+	mcp_id        TEXT NOT NULL,
+	tool_name     TEXT NOT NULL,
+	approved_hash TEXT NOT NULL,
+	current_hash  TEXT NOT NULL,
+	status        TEXT NOT NULL DEFAULT 'APPROVED',
+	first_seen_at INTEGER NOT NULL,
+	updated_at    INTEGER NOT NULL,
+	PRIMARY KEY (mcp_id, tool_name)
+);
 `
 
 // Entry is the persisted record for a single installed MCP.
@@ -45,6 +59,26 @@ type Entry struct {
 	Args    []string
 	Env     map[string]string
 	Cwd     string
+}
+
+const (
+	ToolStatusApproved      = "APPROVED"
+	ToolStatusPendingReview = "PENDING_REVIEW"
+)
+
+type ToolDefinition struct {
+	Name        string
+	Description string
+	InputSchema json.RawMessage
+}
+
+type ToolReview struct {
+	MCPID        string
+	ToolName     string
+	ApprovedHash string
+	CurrentHash  string
+	Status       string
+	UpdatedAt    int64
 }
 
 // DB wraps a sql.DB with typed helpers.
@@ -222,6 +256,115 @@ func (d *DB) SetEnv(ctx context.Context, id string, env map[string]string) error
 		return errors.New("registry: not installed")
 	}
 	return nil
+}
+
+// VerifyToolDefinitions stores first-seen tool definition hashes and marks a
+// tool as PENDING_REVIEW when its description or input schema changes later.
+func (d *DB) VerifyToolDefinitions(ctx context.Context, mcpID string, defs []ToolDefinition) (map[string]ToolReview, error) {
+	now := time.Now().Unix()
+	tx, err := d.sql.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	out := make(map[string]ToolReview, len(defs))
+	for _, def := range defs {
+		hash, err := HashToolDefinition(def)
+		if err != nil {
+			return nil, err
+		}
+		var existing ToolReview
+		row := tx.QueryRowContext(ctx, `
+			SELECT approved_hash, current_hash, status, updated_at
+			FROM tool_definition_hashes
+			WHERE mcp_id = ? AND tool_name = ?`, mcpID, def.Name)
+		err = row.Scan(&existing.ApprovedHash, &existing.CurrentHash, &existing.Status, &existing.UpdatedAt)
+		if errors.Is(err, sql.ErrNoRows) {
+			_, err = tx.ExecContext(ctx, `
+				INSERT INTO tool_definition_hashes (mcp_id, tool_name, approved_hash, current_hash, status, first_seen_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?)`, mcpID, def.Name, hash, hash, ToolStatusApproved, now, now)
+			if err != nil {
+				return nil, err
+			}
+			out[def.Name] = ToolReview{MCPID: mcpID, ToolName: def.Name, ApprovedHash: hash, CurrentHash: hash, Status: ToolStatusApproved, UpdatedAt: now}
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		status := ToolStatusApproved
+		if existing.ApprovedHash != hash {
+			status = ToolStatusPendingReview
+		}
+		_, err = tx.ExecContext(ctx, `
+			UPDATE tool_definition_hashes
+			SET current_hash = ?, status = ?, updated_at = ?
+			WHERE mcp_id = ? AND tool_name = ?`, hash, status, now, mcpID, def.Name)
+		if err != nil {
+			return nil, err
+		}
+		out[def.Name] = ToolReview{MCPID: mcpID, ToolName: def.Name, ApprovedHash: existing.ApprovedHash, CurrentHash: hash, Status: status, UpdatedAt: now}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (d *DB) ListPendingToolReviews(ctx context.Context) ([]ToolReview, error) {
+	rows, err := d.sql.QueryContext(ctx, `
+		SELECT mcp_id, tool_name, approved_hash, current_hash, status, updated_at
+		FROM tool_definition_hashes
+		WHERE status = ?
+		ORDER BY updated_at DESC`, ToolStatusPendingReview)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ToolReview
+	for rows.Next() {
+		var r ToolReview
+		if err := rows.Scan(&r.MCPID, &r.ToolName, &r.ApprovedHash, &r.CurrentHash, &r.Status, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (d *DB) ApproveToolDefinition(ctx context.Context, mcpID, toolName string) error {
+	res, err := d.sql.ExecContext(ctx, `
+		UPDATE tool_definition_hashes
+		SET approved_hash = current_hash, status = ?, updated_at = ?
+		WHERE mcp_id = ? AND tool_name = ?`, ToolStatusApproved, time.Now().Unix(), mcpID, toolName)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return errors.New("registry: tool definition not found")
+	}
+	return nil
+}
+
+func HashToolDefinition(def ToolDefinition) (string, error) {
+	inputSchema := any(map[string]any{})
+	if len(def.InputSchema) > 0 {
+		if err := json.Unmarshal(def.InputSchema, &inputSchema); err != nil {
+			return "", fmt.Errorf("decode input schema for %s: %w", def.Name, err)
+		}
+	}
+	canonical, err := json.Marshal(struct {
+		Name        string `json:"name"`
+		Description string `json:"description,omitempty"`
+		InputSchema any    `json:"inputSchema"`
+	}{Name: def.Name, Description: def.Description, InputSchema: inputSchema})
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(canonical)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // TODO(phase 3+): add a `schema_version` table and a migration runner before

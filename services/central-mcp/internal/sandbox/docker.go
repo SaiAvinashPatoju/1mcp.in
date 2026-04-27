@@ -32,7 +32,7 @@ func (d Docker) Spec(id string, m *manifest.Manifest, _ string, _ []string, _ st
 	if cli == "" {
 		cli = "docker"
 	}
-	args := []string{"run", "-i", "--rm", "--name", containerName(id)}
+	args := []string{"run", "-i", "--rm", "--name", containerName(id), "--cpus=1", "--memory=512m", "--pids-limit=256", "--read-only"}
 
 	if m.Permissions == nil || !m.Permissions.Network {
 		args = append(args, "--network=none")
