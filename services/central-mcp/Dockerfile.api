@@ -3,9 +3,9 @@
 # services/central-mcp and the build command is overridden to use this file.
 FROM golang:1.22-alpine AS builder
 WORKDIR /app
-COPY go.mod go.sum ./
+COPY services/central-mcp/go.mod services/central-mcp/go.sum ./
 RUN go mod download
-COPY . .
+COPY services/central-mcp ./
 RUN go build -trimpath -ldflags "-s -w" -o /mcpapiserver ./cmd/mcpapiserver
 
 FROM alpine:3.19
