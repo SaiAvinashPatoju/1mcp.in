@@ -51,18 +51,8 @@
       ],
       "dialog": false
     },
-    "notification": {
-      "permissions": ["default"]
-    },
     "shell": {
-      "open": true,
-      "scope": [
-        {
-          "name": "onemcpctl",
-          "cmd": "onemcpctl",
-          "args": true
-        }
-      ]
+      "open": true
     }
   }
 }
