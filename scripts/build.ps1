@@ -23,7 +23,7 @@ try {
     go mod tidy
     if ($LASTEXITCODE -ne 0) { throw "go mod tidy failed" }
 
-    $cmds = @("centralmcpd", "onemcpctl", "onemcpe2e", "stubmcp")
+    $cmds = @("centralmcpd", "onemcpctl", "onemcpe2e", "stubmcp", "mcpapiserver")
     foreach ($c in $cmds) {
         $out = Join-Path $OutDir "$c.exe"
         Write-Host "go build -> $out"
