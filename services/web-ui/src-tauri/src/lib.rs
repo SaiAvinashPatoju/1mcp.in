@@ -58,8 +58,15 @@ struct ClientConfigTarget {
     kind: ClientConfigKind,
 }
 
+#[derive(Debug, Serialize)]
+struct ClientConnectionState {
+    id: String,
+    connected: bool,
+    config_path: Option<String>,
+}
+
 fn cloud_api_url() -> &'static str {
-    option_env!("ONEMCP_API_URL").unwrap_or(if cfg!(debug_assertions) {
+    option_env!("MACH1_API_URL").unwrap_or(if cfg!(debug_assertions) {
         "http://localhost:8080"
     } else {
         "https://mcpapiserver-production.up.railway.app"
@@ -298,7 +305,7 @@ async fn run_update_check(app: tauri::AppHandle, interactive: bool) {
                 .notification()
                 .builder()
                 .title("1mcp.in Update Available")
-                .body(format!("Version {} is downloading in the background…", version))
+                .body(format!("Version {} is downloading in the backgroundÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦", version))
                 .show();
 
             let _ = app.emit("update-downloading", &version);
@@ -394,7 +401,9 @@ pub fn run() {
             increment_user_count,
             check_update,
             restart_app,
+            get_client_connections,
             patch_client_config,
+            remove_client_config,
             list_marketplace,
             sync_marketplace,
         ])
@@ -402,10 +411,7 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-#[tauri::command]
-fn patch_client_config(app: tauri::AppHandle, client_id: String) -> Result<String, String> {
-    use std::fs;
-
+fn resolve_client_target(app: &tauri::AppHandle, client_id: &str) -> Result<ClientConfigTarget, String> {
     let config_dir = app
         .path()
         .config_dir()
@@ -415,7 +421,7 @@ fn patch_client_config(app: tauri::AppHandle, client_id: String) -> Result<Strin
         .home_dir()
         .map_err(|_| "Failed to resolve home directory".to_string())?;
 
-    let target = match client_id.as_str() {
+    Ok(match client_id {
         "vscode" => ClientConfigTarget {
             path: config_dir.join("Code").join("User").join("mcp.json"),
             kind: ClientConfigKind::VscodeMcpJson,
@@ -446,11 +452,80 @@ fn patch_client_config(app: tauri::AppHandle, client_id: String) -> Result<Strin
         },
         _ => {
             return Err(format!(
-                "Automated setup for '{}' is not yet supported. Please add the 1mcp server config manually.",
+                "Automated setup for '{}' is not yet supported. Please add the mach1 server config manually.",
                 client_id
             ))
         }
-    };
+    })
+}
+
+fn read_client_config(path: &Path) -> serde_json::Value {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str(&content).ok())
+        .unwrap_or_else(|| serde_json::json!({}))
+}
+
+fn client_has_mach1(target: &ClientConfigTarget, json: &serde_json::Value) -> bool {
+    match target.kind {
+        ClientConfigKind::VscodeMcpJson => json
+            .get("servers")
+            .and_then(|value| value.as_object())
+            .map(|servers| servers.contains_key("mach1"))
+            .unwrap_or(false),
+        ClientConfigKind::McpServers => json
+            .get("mcpServers")
+            .and_then(|value| value.as_object())
+            .map(|servers| servers.contains_key("mach1"))
+            .unwrap_or(false),
+        ClientConfigKind::Opencode => json
+            .get("mcp")
+            .and_then(|value| value.as_object())
+            .map(|servers| servers.contains_key("mach1"))
+            .unwrap_or(false),
+    }
+}
+
+#[tauri::command]
+fn get_client_connections(app: tauri::AppHandle) -> Result<Vec<ClientConnectionState>, String> {
+    let client_ids = [
+        "vscode",
+        "cursor",
+        "claude",
+        "claudecode",
+        "codex",
+        "windsurf",
+        "opencode",
+        "antigravity",
+    ];
+
+    let states = client_ids
+        .into_iter()
+        .map(|client_id| match resolve_client_target(&app, client_id) {
+            Ok(target) => {
+                let json = read_client_config(&target.path);
+                ClientConnectionState {
+                    id: client_id.to_string(),
+                    connected: client_has_mach1(&target, &json),
+                    config_path: Some(target.path.to_string_lossy().to_string()),
+                }
+            }
+            Err(_) => ClientConnectionState {
+                id: client_id.to_string(),
+                connected: false,
+                config_path: None,
+            },
+        })
+        .collect();
+
+    Ok(states)
+}
+
+#[tauri::command]
+fn patch_client_config(app: tauri::AppHandle, client_id: String) -> Result<String, String> {
+    use std::fs;
+
+    let target = resolve_client_target(&app, &client_id)?;
 
     if !target.path.exists() {
         if let Some(parent) = target.path.parent() {
@@ -471,7 +546,7 @@ fn patch_client_config(app: tauri::AppHandle, client_id: String) -> Result<Strin
         .path()
         .app_data_dir()
         .map_err(|_| "Failed to resolve app data dir".to_string())?;
-    let db_path = data_dir.join("1mcp.db");
+    let db_path = data_dir.join("mach1.db");
     let bin_path = ensure_router_binary(&app)?;
 
     let mcp_entry = serde_json::json!({
@@ -493,10 +568,10 @@ fn patch_client_config(app: tauri::AppHandle, client_id: String) -> Result<Strin
         ClientConfigKind::VscodeMcpJson => {
             if let Some(obj) = json.as_object_mut() {
                 if let Some(servers) = obj.get_mut("servers").and_then(|value| value.as_object_mut()) {
-                    servers.insert("1mcp".to_string(), mcp_entry);
+                    servers.insert("mach1".to_string(), mcp_entry);
                 } else {
                     let mut servers = serde_json::Map::new();
-                    servers.insert("1mcp".to_string(), mcp_entry);
+                    servers.insert("mach1".to_string(), mcp_entry);
                     obj.insert("servers".to_string(), serde_json::Value::Object(servers));
                 }
             }
@@ -504,10 +579,10 @@ fn patch_client_config(app: tauri::AppHandle, client_id: String) -> Result<Strin
         ClientConfigKind::McpServers => {
             if let Some(obj) = json.as_object_mut() {
                 if let Some(servers) = obj.get_mut("mcpServers").and_then(|value| value.as_object_mut()) {
-                    servers.insert("1mcp".to_string(), mcp_entry);
+                    servers.insert("mach1".to_string(), mcp_entry);
                 } else {
                     let mut servers = serde_json::Map::new();
-                    servers.insert("1mcp".to_string(), mcp_entry);
+                    servers.insert("mach1".to_string(), mcp_entry);
                     obj.insert("mcpServers".to_string(), serde_json::Value::Object(servers));
                 }
             }
@@ -515,10 +590,10 @@ fn patch_client_config(app: tauri::AppHandle, client_id: String) -> Result<Strin
         ClientConfigKind::Opencode => {
             if let Some(obj) = json.as_object_mut() {
                 if let Some(servers) = obj.get_mut("mcp").and_then(|value| value.as_object_mut()) {
-                    servers.insert("1mcp".to_string(), opencode_entry);
+                    servers.insert("mach1".to_string(), opencode_entry);
                 } else {
                     let mut servers = serde_json::Map::new();
-                    servers.insert("1mcp".to_string(), opencode_entry);
+                    servers.insert("mach1".to_string(), opencode_entry);
                     obj.insert("mcp".to_string(), serde_json::Value::Object(servers));
                 }
             }
@@ -534,11 +609,50 @@ fn patch_client_config(app: tauri::AppHandle, client_id: String) -> Result<Strin
     Ok(target.path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+fn remove_client_config(app: tauri::AppHandle, client_id: String) -> Result<bool, String> {
+    let target = resolve_client_target(&app, &client_id)?;
+    if !target.path.exists() {
+        return Ok(false);
+    }
+
+    let mut json = read_client_config(&target.path);
+    let removed = match target.kind {
+        ClientConfigKind::VscodeMcpJson => json
+            .get_mut("servers")
+            .and_then(|value| value.as_object_mut())
+            .and_then(|servers| servers.remove("mach1"))
+            .is_some(),
+        ClientConfigKind::McpServers => json
+            .get_mut("mcpServers")
+            .and_then(|value| value.as_object_mut())
+            .and_then(|servers| servers.remove("mach1"))
+            .is_some(),
+        ClientConfigKind::Opencode => json
+            .get_mut("mcp")
+            .and_then(|value| value.as_object_mut())
+            .and_then(|servers| servers.remove("mach1"))
+            .is_some(),
+    };
+
+    if !removed {
+        return Ok(false);
+    }
+
+    std::fs::write(
+        &target.path,
+        serde_json::to_string_pretty(&json).unwrap_or_default(),
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(true)
+}
+
 fn router_binary_name() -> &'static str {
     if cfg!(target_os = "windows") {
-        "centralmcpd.exe"
+        "mach1.exe"
     } else {
-        "centralmcpd"
+        "mach1"
     }
 }
 
@@ -596,5 +710,5 @@ fn ensure_router_binary(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         return Ok(staged_path);
     }
 
-    Err("centralmcpd binary was not bundled with the app. Reinstall 1mcp.in or configure the client manually.".to_string())
+    Err("mach1 binary was not bundled with the app. Reinstall 1mcp.in or configure the client manually.".to_string())
 }
