@@ -3,5 +3,5 @@
 # since the repo contains multiple services.
 
 [build]
-dockerfilePath = "services/central-mcp/Dockerfile.api"
+dockerfilePath = "Dockerfile.api"
 contextRelativePath = "services/central-mcp"
