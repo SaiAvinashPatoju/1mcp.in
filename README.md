@@ -13,21 +13,37 @@ the original product brief.
 |---|---|---|
 | 0 | Manifest schema | ✅ `packages/mcp-manifest/manifest.schema.json` |
 | 1 | Central MCP (Go) | ✅ `services/central-mcp` — stdio router, SQLite registry, multi-upstream proxy |
-| 2 | Tauri hub (download/install) | ⏳ next |
-| 3 | MCP management (keys, delete) | ⏳ |
-| 4 | Client connect (VS Code shim + wizard) | ⏳ |
-| 5 | Sandbox + lazy start | ⏳ |
-| 6 | Semantic routing (LanceDB + ONNX) | ⏳ |
-| 7 | E2E test matrix | ⏳ |
+| 2 | Cloud API (Go/Postgres) | ✅ `mcpapiserver` — Auth, Marketplace stats, Live on Railway |
+| 3 | Tauri hub (UI) | ✅ `services/web-ui` — SvelteKit Dashboard, real Cloud Auth integration |
+| 4 | MCP management (keys, delete) | ⏳ |
+| 5 | Client connect (VS Code shim + wizard) | ⏳ |
+| 6 | Sandbox + lazy start | ⏳ |
+| 7 | Semantic routing (LanceDB + ONNX) | ⏳ |
+| 8 | E2E test matrix | ⏳ |
 
-## Quick start (Phase 1)
+## Cloud API (Live)
 
-Requires Go 1.22+ and Node.js (only for the example child MCPs via `npx`).
+The central marketplace and user session data are handled by the Cloud API:
+- **Base URL**: `https://mcpapiserver-production.up.railway.app`
+- **Health**: `/health`
+- **Stack**: Go 1.25, pgx/v5, PostgreSQL (Railway)
 
+## Quick start (Phase 1 & 2)
+
+Requires Go 1.25+ and Node.js.
+
+### Local Router
 ```powershell
 cd services\central-mcp
 go build -o ..\..\bin\centralmcpd.exe .\cmd\centralmcpd
 ..\..\bin\centralmcpd.exe --config .\config.example.json --log debug
+```
+
+### Web UI
+```powershell
+cd services\web-ui
+npm install
+npm run dev
 ```
 
 Then connect any MCP client (e.g. `npx @modelcontextprotocol/inspector`) to

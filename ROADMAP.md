@@ -42,11 +42,20 @@ OneMcp/
 
 ## Phase 1 — Central MCP skeleton (build core)
 
-- [ ] Go module `services/central-mcp` with `centralmcpd` binary.
-- [ ] Implement MCP server (stdio) speaking JSON-RPC 2.0 per MCP spec.
-- [ ] In-memory registry loaded from SQLite (`installed_mcps` table).
-- [ ] Static router: forward `tools/call` to a hard-coded child by name.
-- [ ] Structured logging (zerolog) + pprof endpoint behind flag.
+- [x] Go module `services/central-mcp` with `centralmcpd` binary.
+- [x] Implement MCP server (stdio) speaking JSON-RPC 2.0 per MCP spec.
+- [x] In-memory registry loaded from SQLite (`installed_mcps` table).
+- [x] Static router: forward `tools/call` to a hard-coded child by name.
+- [x] Structured logging (zerolog) + pprof endpoint behind flag.
+
+## Phase 2 — Cloud Infrastructure & Hub UI (current)
+
+- [x] Deploy Cloud API (`mcpapiserver`) to Railway.
+- [x] Provision Managed PostgreSQL for user accounts and marketplace metadata.
+- [x] Implement Auth bridge (Bcrypt + pgx) in Cloud API.
+- [x] Wire Svelte UI (`services/web-ui`) to live Cloud API.
+- [ ] Implement Tauri v2 bridge for local FS/Registry operations.
+- [ ] Marketplace catalog sync (Cloud → Local SQLite).
 
 **Exit:** `centralmcpd` proxies one real upstream MCP (e.g. `@modelcontextprotocol/server-filesystem`) end-to-end via stdio.
 
