@@ -12,6 +12,8 @@ dist/
 **/src-tauri/target/
 **/src-tauri/gen/
 services/web-ui/build/
+.env.local
+.env*.local
 
 # Go
 /services/central-mcp/centralmcpd
