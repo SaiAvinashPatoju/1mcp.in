@@ -3,5 +3,5 @@
 # since the repo contains multiple services.
 
 [build]
-dockerfilePath = "services/central-mcp/Dockerfile.api"
-# contextRelativePath = "services/central-mcp" # Removed to allow Dockerfile to access the full repo
+dockerfilePath = "services/mach1/Dockerfile.api"
+# contextRelativePath = "services/mach1" # Removed to allow Dockerfile to access the full repo

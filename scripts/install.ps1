@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$Version = $env:ONEMCP_VERSION,
-    [string]$InstallDir = $env:ONEMCP_INSTALL_DIR,
+    [string]$Version = $env:MACH1_VERSION,
+    [string]$InstallDir = $env:MACH1_INSTALL_DIR,
     [string]$Owner = "SaiAvinashPatoju",
     [string]$Repo = "1mcp.in"
 )
@@ -11,7 +11,7 @@ if (-not $Version) { $Version = "latest" }
 if (-not $InstallDir) { $InstallDir = Join-Path $env:LOCALAPPDATA "1mcp\bin" }
 
 $arch = if ([Environment]::Is64BitOperatingSystem) { "amd64" } else { throw "Unsupported architecture" }
-$asset = "onemcp-windows-$arch.zip"
+$asset = "mach1-windows-$arch.zip"
 $api = if ($Version -eq "latest") {
     "https://api.github.com/repos/$Owner/$Repo/releases/latest"
 } else {
@@ -41,5 +41,5 @@ if (($userPath -split ';') -notcontains $InstallDir) {
     Write-Host "Added $InstallDir to user PATH"
 }
 
-Write-Host "1mcp installed in $InstallDir"
-Write-Host "Run `"onemcpctl start`" to launch 1mcp"
+Write-Host "1mcp.in installed in $InstallDir"
+Write-Host "Run `"mach1ctl start`" to launch 1mcp.in"

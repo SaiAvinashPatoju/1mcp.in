@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OWNER="${ONEMCP_GITHUB_OWNER:-SaiAvinashPatoju}"
-REPO="${ONEMCP_GITHUB_REPO:-1mcp.in}"
-VERSION="${ONEMCP_VERSION:-latest}"
-INSTALL_DIR="${ONEMCP_INSTALL_DIR:-$HOME/.onemcp/bin}"
+OWNER="${MACH1_GITHUB_OWNER:-SaiAvinashPatoju}"
+REPO="${MACH1_GITHUB_REPO:-1mcp.in}"
+VERSION="${MACH1_VERSION:-latest}"
+INSTALL_DIR="${MACH1_INSTALL_DIR:-$HOME/.mach1/bin}"
 
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
@@ -31,7 +31,7 @@ if ! command -v curl >/dev/null 2>&1; then
 fi
 
 mkdir -p "${INSTALL_DIR}"
-ASSET="onemcp-${OS}-${ARCH}.tar.gz"
+ASSET="mach1-${OS}-${ARCH}.tar.gz"
 URL="$(curl -fsSL "${API_URL}" | sed -n "s/.*\"browser_download_url\": \"\([^\"]*${ASSET}\)\".*/\1/p" | head -1)"
 if [ -z "${URL}" ]; then
   echo "Could not find release asset ${ASSET}" >&2
@@ -42,7 +42,7 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 curl -fsSL "${URL}" -o "${TMP_DIR}/${ASSET}"
 tar -xzf "${TMP_DIR}/${ASSET}" -C "${INSTALL_DIR}"
-chmod +x "${INSTALL_DIR}/centralmcpd" "${INSTALL_DIR}/onemcpctl" 2>/dev/null || true
+chmod +x "${INSTALL_DIR}/mach1" "${INSTALL_DIR}/mach1ctl" 2>/dev/null || true
 
 case ":${PATH}:" in
   *":${INSTALL_DIR}:"*) ;;
@@ -54,5 +54,5 @@ case ":${PATH}:" in
     ;;
 esac
 
-echo "1mcp installed in ${INSTALL_DIR}"
-echo "Run \`onemcpctl start\` to launch 1mcp"
+echo "1mcp.in installed in ${INSTALL_DIR}"
+echo "Run \`mach1ctl start\` to launch 1mcp.in"

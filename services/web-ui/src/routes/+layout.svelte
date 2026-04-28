@@ -49,7 +49,7 @@
 	}
 
 	onMount(async () => {
-		pushLog('system', '1mcp initialized — waiting for events…', 'success');
+		pushLog('system', 'mach1 initialized - waiting for events...', 'success');
 
 		// Kick off background data syncs
 		startUserCounter();

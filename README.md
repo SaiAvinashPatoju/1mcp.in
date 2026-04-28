@@ -28,7 +28,7 @@ irm https://install.1mcp.in/windows | iex
 Then launch the router:
 
 ```bash
-onemcpctl start
+mach1ctl start
 ```
 
 ## Why 1mcp
@@ -47,9 +47,9 @@ MCP is powerful, but managing servers one by one is tedious: every AI client nee
 
 | Client | Status | Setup |
 |---|---|---|
-| VS Code / GitHub Copilot | Supported | `onemcpctl connect vscode` |
-| Cursor | Supported | `onemcpctl connect cursor` |
-| Claude Desktop | Supported | `onemcpctl connect claude` |
+| VS Code / GitHub Copilot | Supported | `mach1ctl connect vscode` |
+| Cursor | Supported | `mach1ctl connect cursor` |
+| Claude Desktop | Supported | `mach1ctl connect claude` |
 | Claude Code | Supported | Manual MCP config today |
 | OpenCode / Codex / Windsurf | In progress | Manual MCP config today |
 
@@ -69,32 +69,32 @@ bash scripts/build.sh
 List marketplace MCPs:
 
 ```bash
-bin/onemcpctl catalog list
+bin/mach1ctl catalog list
 ```
 
 Install one:
 
 ```bash
-bin/onemcpctl install github
-bin/onemcpctl env set github GITHUB_PERSONAL_ACCESS_TOKEN=...
+bin/mach1ctl install github
+bin/mach1ctl env set github GITHUB_PERSONAL_ACCESS_TOKEN=...
 ```
 
 Connect a client:
 
 ```bash
-bin/onemcpctl connect vscode
+bin/mach1ctl connect vscode
 ```
 
 Run the router over stdio for AI clients:
 
 ```bash
-bin/centralmcpd --db "$HOME/.onemcp/registry.db"
+bin/mach1 --db "$HOME/.mach1/registry.db"
 ```
 
 Run Streamable HTTP locally:
 
 ```bash
-bin/centralmcpd --transport http --listen 127.0.0.1:3000
+bin/mach1 --transport http --listen 127.0.0.1:3000
 ```
 
 Metrics are exposed on `127.0.0.1:3031/metrics` in stdio mode, and on `/metrics` beside the HTTP transport in HTTP mode.
@@ -115,14 +115,14 @@ The Hub UI is SvelteKit + Tauri. It manages local installs, credentials, client 
 The registry lives in [packages/registry-index/index.json](packages/registry-index/index.json). Each entry carries a trust label and SHA256 digest:
 
 - `anthropic-official`: official MCPs from the Anthropic / Model Context Protocol catalog.
-- `onemcp-verified`: reviewed and tested by 1mcp maintainers.
+- `1mcp.in-verified`: reviewed and tested by 1mcp maintainers.
 - `community`: submitted by the community and signed only after maintainer review.
 
 Verify the catalog:
 
 ```bash
-cd services/central-mcp
-go run ./cmd/onemcpsignregistry --check --catalog ../../packages/registry-index/index.json
+cd services/mach1
+go run ./cmd/mach1signregistry --check --catalog ../../packages/registry-index/index.json
 ```
 
 Submit a new MCP through the PR flow in [CONTRIBUTING_MCP.md](CONTRIBUTING_MCP.md). Community entries are never auto-approved.
@@ -140,9 +140,9 @@ Submit a new MCP through the PR flow in [CONTRIBUTING_MCP.md](CONTRIBUTING_MCP.m
 Local release checks used by maintainers:
 
 ```bash
-cd services/central-mcp
+cd services/mach1
 go vet ./...
-go run ./cmd/onemcpsignregistry --check --catalog ../../packages/registry-index/index.json
+go run ./cmd/mach1signregistry --check --catalog ../../packages/registry-index/index.json
 go test ./...
 
 cd ../..
@@ -168,7 +168,7 @@ Join the waitlist: [1mcp.in/team](https://1mcp.in/team).
 ## Repository Layout
 
 ```text
-services/central-mcp     Go router, API server, CLI, sandbox, supervisor
+services/mach1     Go router, API server, CLI, sandbox, supervisor
 services/web-ui          SvelteKit + Tauri desktop Hub
 packages/mcp-manifest    Manifest JSON Schema
 packages/registry-index  Signed marketplace catalog

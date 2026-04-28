@@ -3,7 +3,7 @@
 This guide walks through setting up Railway for automated cloud deployment via GitHub Actions.
 
 ## Prerequisites
-- GitHub repository access (Settings → Secrets)
+- GitHub repository access (Settings â†’ Secrets)
 - Railway CLI installed: `npm install -g @railway/cli`
 - Railway account linked locally: `railway login`
 
@@ -41,7 +41,7 @@ The token looks like: `rw_xxx_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
 ## Step 3: Add Token to GitHub Secrets
 
 1. Go to your GitHub repo: `github.com/SaiAvinashPatoju/1mcp.in`
-2. Settings → Secrets and Variables → Actions
+2. Settings â†’ Secrets and Variables â†’ Actions
 3. Click "New repository secret"
 4. **Name:** `RAILWAY_TOKEN`
 5. **Value:** Paste the token from Step 2
@@ -73,13 +73,13 @@ git push origin main --tags
 ```
 
 Then check:
-1. **CI workflow**: https://github.com/SaiAvinashPatoju/1mcp.in/actions → Workflows → CI
-2. **Release workflow** (on tag): → Release
-3. **Deploy logs**: Railway Dashboard → mcpapiserver → Deployments
+1. **CI workflow**: https://github.com/SaiAvinashPatoju/1mcp.in/actions â†’ Workflows â†’ CI
+2. **Release workflow** (on tag): â†’ Release
+3. **Deploy logs**: Railway Dashboard â†’ mcpapiserver â†’ Deployments
 
 Expected flow:
 - `ci.yml` runs: Go tests, version check, Tauri builds
-- `release.yml` runs (on tag): Go test → Deploy to Railway → Publish GitHub Release
+- `release.yml` runs (on tag): Go test â†’ Deploy to Railway â†’ Publish GitHub Release
 
 ## Troubleshooting
 
@@ -95,7 +95,7 @@ Expected flow:
 ### CI passes but release fails
 - Check `.github/workflows/release.yml` for correct service name
 - Verify Railway CLI version: `railway --version` (need v4.0+)
-- Check logs: Railway Dashboard → Service → Deployments
+- Check logs: Railway Dashboard â†’ Service â†’ Deployments
 
 ### "Service not found" in GitHub Actions
 - `.railway/config.json` might not be committed or is stale
@@ -108,7 +108,7 @@ Expected flow:
 Test the deploy locally without GitHub:
 
 ```bash
-cd services/central-mcp
+cd services/mach1
 railway run bash -c 'go run ./cmd/mcpapiserver'
 # or
 railway up --service mcpapiserver --detach

@@ -1,4 +1,4 @@
-# Build all OneMCP binaries into ./bin
+# Build all 1mcp.in binaries into ./bin
 # Usage:  pwsh ./scripts/build.ps1
 [CmdletBinding()]
 param(
@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..")
-$serviceDir = Join-Path $repoRoot "services\central-mcp"
+$serviceDir = Join-Path $repoRoot "services\mach1"
 if (-not $OutDir) { $OutDir = Join-Path $repoRoot "bin" }
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Force -Path $OutDir | Out-Null }
 $OutDir = (Resolve-Path $OutDir).Path
@@ -33,10 +33,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "go mod tidy failed" }
 
     Write-Host "verify registry signatures"
-    go run ./cmd/onemcpsignregistry --check --catalog (Join-Path $repoRoot "packages\registry-index\index.json")
+    go run ./cmd/mach1signregistry --check --catalog (Join-Path $repoRoot "packages\registry-index\index.json")
     if ($LASTEXITCODE -ne 0) { throw "registry signature verification failed" }
 
-    $cmds = @("centralmcpd", "onemcpctl", "onemcpe2e", "stubmcp", "mcpapiserver")
+    $cmds = @("mach1", "mach1ctl", "mach1e2e", "stubmcp", "mcpapiserver")
     foreach ($c in $cmds) {
         $out = Join-Path $OutDir "$c.exe"
         Write-Host "go build -> $out"

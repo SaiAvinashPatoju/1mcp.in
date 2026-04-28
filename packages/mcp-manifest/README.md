@@ -1,9 +1,9 @@
-# @onemcp/mcp-manifest
+# @mach1/mcp-manifest
 
-Source-of-truth schema for an installable MCP in OneMCP.
+Source-of-truth schema for an installable MCP in 1mcp.in.
 
-- `manifest.schema.json` — JSON Schema (draft 2020-12). Edit this file and only this file.
-- Go types: generated into `services/central-mcp/internal/manifest` (see `services/central-mcp/Makefile`).
+- `manifest.schema.json` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â JSON Schema (draft 2020-12). Edit this file and only this file.
+- Go types: generated into `services/mach1/internal/manifest` (see `services/mach1/Makefile`).
 - TS types: generated into `apps/hub/src/lib/manifest.d.ts` (Phase 2).
 
 ## Validation rules worth knowing

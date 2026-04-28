@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '../../..');
-const centralMcpDir = path.join(repoRoot, 'services', 'central-mcp');
-const routerName = process.platform === 'win32' ? 'centralmcpd.exe' : 'centralmcpd';
+const mach1Dir = path.join(repoRoot, 'services', 'mach1');
+const routerName = process.platform === 'win32' ? 'mach1.exe' : 'mach1';
 const sourcePath = path.join(repoRoot, 'bin', routerName);
 const destDir = path.resolve(__dirname, '../src-tauri/resources');
 const destPath = path.join(destDir, routerName);
@@ -17,9 +17,9 @@ fs.mkdirSync(destDir, { recursive: true });
 function buildRouter(targetPath) {
   execFileSync(
     'go',
-    ['build', '-trimpath', '-ldflags', '-s -w', '-o', targetPath, './cmd/centralmcpd'],
+    ['build', '-trimpath', '-ldflags', '-s -w', '-o', targetPath, './cmd/mach1'],
     {
-      cwd: centralMcpDir,
+      cwd: mach1Dir,
       stdio: 'inherit'
     }
   );

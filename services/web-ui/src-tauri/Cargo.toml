@@ -1,11 +1,11 @@
 [package]
-name = "onemcp"
+name = "mach1"
 version = "0.2.4"
 edition = "2021"
-description = "1mcp.in — Cross-platform MCP management hub"
+description = "1mcp.in - Cross-platform MCP management hub"
 
 [lib]
-name = "onemcp_lib"
+name = "mach1_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

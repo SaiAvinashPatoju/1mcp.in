@@ -13,8 +13,8 @@ The marketplace grows through pull requests. Community submissions are never aut
 CI validates manifest structure, duplicate IDs, and maintainer-pinned SHA256 values. A maintainer will run the MCP locally, inspect install behavior, check for suspicious code paths, then sign the entry with:
 
 ```bash
-cd services/central-mcp
-go run ./cmd/onemcpsignregistry --catalog ../../packages/registry-index/index.json
+cd services/mach1
+go run ./cmd/mach1signregistry --catalog ../../packages/registry-index/index.json
 ```
 
 ## Manifest Template
@@ -52,7 +52,7 @@ go run ./cmd/onemcpsignregistry --catalog ../../packages/registry-index/index.js
 ## Trust Labels
 
 - `anthropic-official`: official MCPs from the Model Context Protocol / Anthropic catalog.
-- `onemcp-verified`: reviewed and tested by 1mcp maintainers.
+- `1mcp.in-verified`: reviewed and tested by 1mcp maintainers.
 - `community`: submitted by the community and signed only after maintainer review.
 
 ## Security Rules

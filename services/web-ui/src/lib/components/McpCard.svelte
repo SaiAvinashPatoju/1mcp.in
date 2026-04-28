@@ -8,7 +8,7 @@
 
 	const verificationConfig = {
 		'anthropic-official': { label: 'Anthropic Official', textClass: 'text-emerald-400', bgClass: 'bg-emerald-900/20 border-emerald-800/50' },
-		'onemcp-verified': { label: '1mcp Verified', textClass: 'text-sky-400', bgClass: 'bg-sky-900/20 border-sky-800/50' },
+		'1mcp.in-verified': { label: '1mcp.in Verified', textClass: 'text-sky-400', bgClass: 'bg-sky-900/20 border-sky-800/50' },
 		community: { label: 'Community', textClass: 'text-yellow-400', bgClass: 'bg-yellow-900/20 border-yellow-800/50' },
 		verified: { label: 'Verified', textClass: 'text-emerald-400', bgClass: 'bg-emerald-900/20 border-emerald-800/50' },
 		unverified: { label: 'Community', textClass: 'text-yellow-400', bgClass: 'bg-yellow-900/20 border-yellow-800/50' },
@@ -57,7 +57,7 @@
 	<div class="flex items-center gap-3 text-xs text-white/40">
 		<div class="flex items-center gap-1.5">
 			<StarRating rating={mcp.rating} size={11} />
-			<span class="text-white/80 font-medium">{mcp.rating > 0 ? mcp.rating.toFixed(1) : '—'}</span>
+			<span class="text-white/80 font-medium">{mcp.rating > 0 ? mcp.rating.toFixed(1) : '-'}</span>
 			{#if mcp.reviewCount > 0}
 				<span>({fmt(mcp.reviewCount)})</span>
 			{/if}

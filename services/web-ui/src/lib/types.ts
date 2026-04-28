@@ -1,6 +1,6 @@
 export type Runtime = 'node' | 'python' | 'go' | 'binary';
 export type PatProvider = 'github' | 'gitlab' | 'linear' | 'custom';
-export type VerificationStatus = 'anthropic-official' | 'onemcp-verified' | 'community' | 'pending' | 'verified' | 'unverified';
+export type VerificationStatus = 'anthropic-official' | '1mcp.in-verified' | 'community' | 'pending' | 'verified' | 'unverified';
 
 export interface User {
 	id: string;

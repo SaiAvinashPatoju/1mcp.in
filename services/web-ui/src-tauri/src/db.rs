@@ -32,7 +32,7 @@ pub struct Db {
 impl Db {
     pub fn open(data_dir: &PathBuf) -> Result<Self, String> {
         std::fs::create_dir_all(data_dir).map_err(|e| e.to_string())?;
-        let path = data_dir.join("1mcp.db");
+        let path = data_dir.join("mach1.db");
         let conn = Connection::open(&path).map_err(|e| e.to_string())?;
 
         conn.execute_batch(

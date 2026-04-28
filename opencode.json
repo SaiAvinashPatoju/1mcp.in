@@ -1,0 +1,79 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "gopls": {
+      "command": ["gopls"],
+      "extensions": [".go"]
+    },
+    "rust-analyzer": {
+      "command": ["rust-analyzer"],
+      "extensions": [".rs"]
+    },
+    "svelte": {
+      "command": ["svelteserver", "--stdio"],
+      "extensions": [".svelte"]
+    }
+  },
+  "mcp": {
+    "github": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+      "environment": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_TOKEN}"
+      },
+      "enabled": true
+    },
+    "postgres": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost:5432/1mcp"],
+      "enabled": true
+    },
+    "memory": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-memory"],
+      "enabled": true
+    },
+    "knowledge-graph": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-memory", "--file", "C:\\projects\\work\\1Mcp\\knowledge-graph.json"],
+      "enabled": true
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "enabled": true
+    },
+    "brave-search": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-brave-search"],
+      "environment": {
+        "BRAVE_API_KEY": "{env:BRAVE_API_KEY}"
+      },
+      "enabled": true
+    }
+  },
+  "agent": {
+    "go-architect": {
+      "mode": "subagent",
+      "description": "Specialized in Go 1.22+ for the mach1 router, team-api, and mcpapiserver. Use for building transport layers, auth, and sub-process supervision.",
+      "permission": {
+        "bash": "allow",
+        "read": "allow",
+        "edit": "allow"
+      }
+    },
+    "ui-builder": {
+      "mode": "subagent",
+      "description": "Specialized in SvelteKit and Tauri (Rust) for the Local Hub UI and Team UI.",
+      "permission": {
+        "bash": "allow",
+        "read": "allow",
+        "edit": "allow"
+      }
+    }
+  },
+  "permission": {
+    "bash": "ask",
+    "edit": "allow"
+  }
+}

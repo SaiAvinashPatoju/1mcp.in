@@ -18,8 +18,8 @@ services/web-ui/build/
 .env*.local
 
 # Go
-/services/central-mcp/centralmcpd
-/services/central-mcp/centralmcpd.exe
+/services/mach1/mach1
+/services/mach1/mach1.exe
 
 # OS
 .DS_Store

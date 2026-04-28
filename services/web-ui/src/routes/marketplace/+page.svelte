@@ -47,7 +47,7 @@
 
 	function trustRank(status: string): number {
 		if (status === 'anthropic-official') return 0;
-		if (status === 'onemcp-verified' || status === 'verified') return 1;
+		if (status === '1mcp.in-verified' || status === 'verified') return 1;
 		if (status === 'pending') return 2;
 		return 3;
 	}
@@ -78,10 +78,10 @@
 	<div class="flex items-center justify-between mb-6">
 		<div>
 			<h1 class="text-xl font-bold text-white/95">Marketplace</h1>
-			<p class="text-sm text-white/30 mt-1">{totalVerified} verified · {totalCommunity} community</p>
+			<p class="text-sm text-white/30 mt-1">{totalVerified} verified Ã‚Â· {totalCommunity} community</p>
 		</div>
 		<button on:click={() => (showPublish = true)} class="flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-colors font-medium">
-			⬆ Publish MCP
+			Ã¢Â¬â€  Publish MCP
 		</button>
 	</div>
 
@@ -89,7 +89,7 @@
 	<div class="flex items-center gap-3 mb-8 flex-wrap">
 		<div class="relative flex-1 min-w-48 max-w-sm">
 			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="absolute left-3 top-1/2 -translate-y-1/2 text-white/25"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-			<input bind:value={query} placeholder="Search servers, tags, authors…" class="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg pl-9 pr-3 py-2 text-sm text-white/80 placeholder-white/20 focus:outline-none focus:border-violet-500 transition-colors" />
+			<input bind:value={query} placeholder="Search servers, tags, authorsÃ¢â‚¬Â¦" class="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg pl-9 pr-3 py-2 text-sm text-white/80 placeholder-white/20 focus:outline-none focus:border-violet-500 transition-colors" />
 		</div>
 		<div class="flex items-center gap-1 bg-white/[0.03] border border-white/[0.06] rounded-lg p-1">
 			{#each filterOptions as f}
@@ -112,7 +112,7 @@
 		{#if verifiedList.length > 0}
 			<section class="mb-10">
 				<div class="flex items-center gap-2 mb-4">
-					<span class="text-emerald-400 text-xs">🛡</span>
+					<span class="text-emerald-400 text-xs">Ã°Å¸â€ºÂ¡</span>
 					<span class="text-xs font-semibold text-white/30 uppercase tracking-wider">Verified</span>
 				</div>
 				<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -126,7 +126,7 @@
 		{#if communityList.length > 0}
 			<section>
 				<div class="flex items-center gap-2 mb-4">
-					<span class="text-yellow-400 text-xs">⚠</span>
+					<span class="text-yellow-400 text-xs">Ã¢Å¡Â </span>
 					<span class="text-xs font-semibold text-white/30 uppercase tracking-wider">Community</span>
 				</div>
 				<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

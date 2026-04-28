@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://onemcp.dev/schemas/manifest.schema.json",
-  "title": "OneMcpManifest",
-  "description": "Source-of-truth manifest for an MCP installable via OneMCP. Go and TS types are generated from this file.",
+  "$id": "https://1mcp.in/schemas/manifest.schema.json",
+  "title": "Mach1Manifest",
+  "description": "Source-of-truth manifest for an MCP installable via 1mcp.in. Go and TS types are generated from this file.",
   "type": "object",
   "required": ["id", "name", "version", "transport", "runtime", "entrypoint"],
   "additionalProperties": false,
@@ -26,7 +26,7 @@
     "transport": {
       "type": "string",
       "enum": ["stdio", "sse", "http"],
-      "description": "Supported MCP child transport. centralmcpd itself can expose stdio or Streamable HTTP."
+      "description": "Supported MCP child transport. mach1 itself can expose stdio or Streamable HTTP."
     },
 
     "runtime": {
@@ -121,7 +121,7 @@
 
     "verification": {
       "type": "string",
-      "enum": ["anthropic-official", "onemcp-verified", "community"],
+      "enum": ["anthropic-official", "1mcp.in-verified", "community"],
       "description": "Trust class shown in the marketplace. Community entries require maintainer review before release."
     },
 

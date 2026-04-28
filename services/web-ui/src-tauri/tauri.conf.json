@@ -1,7 +1,7 @@
 {
   "productName": "1mcp.in",
   "version": "0.2.4",
-  "identifier": "in.onemcp.hub",
+  "identifier": "in.mach1.hub",
   "build": {
     "frontendDist": "../build",
     "devUrl": "http://localhost:1420",

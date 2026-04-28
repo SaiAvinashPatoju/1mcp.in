@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 OUT_DIR="${1:-${REPO_ROOT}/bin}"
-SERVICE_DIR="${REPO_ROOT}/services/central-mcp"
+SERVICE_DIR="${REPO_ROOT}/services/mach1"
 WEB_DIR="${REPO_ROOT}/services/web-ui"
 
 mkdir -p "${OUT_DIR}"
@@ -18,11 +18,11 @@ echo "Syncing registry-index into API embed dir..."
 mkdir -p "${SERVICE_DIR}/cmd/mcpapiserver/data"
 cp "${REPO_ROOT}/packages/registry-index/index.json" "${SERVICE_DIR}/cmd/mcpapiserver/data/registry-index.json"
 
-echo "Building centralmcpd and CLI binaries..."
+echo "Building mach1 and CLI binaries..."
 pushd "${SERVICE_DIR}" >/dev/null
 go mod tidy
-go run ./cmd/onemcpsignregistry --check --catalog "${REPO_ROOT}/packages/registry-index/index.json"
-for cmd in centralmcpd onemcpctl onemcpe2e stubmcp mcpapiserver; do
+go run ./cmd/mach1signregistry --check --catalog "${REPO_ROOT}/packages/registry-index/index.json"
+for cmd in mach1 mach1ctl mach1e2e stubmcp mcpapiserver; do
   go build -trimpath -ldflags "-s -w" -o "${OUT_DIR}/${cmd}" "./cmd/${cmd}"
 done
 go vet ./...

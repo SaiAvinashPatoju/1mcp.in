@@ -1,0 +1,12 @@
+[
+  {
+    "mcpId": "memory",
+    "tool": "create_entities",
+    "args": {
+      "entities": [
+        { "name": "1mcp.in", "entityType": "project", "observations": ["e2e smoke"] }
+      ]
+    },
+    "allowOK": ["created", "1mcp.in"]
+  }
+]

@@ -9,18 +9,17 @@ permissions:
   contents: write
 
 jobs:
-  # ── Go tests must pass before releasing ─────────────
   go-test:
     runs-on: ubuntu-22.04
     defaults:
       run:
-        working-directory: services/central-mcp
+        working-directory: services/mach1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: services/central-mcp/go.mod
-          cache-dependency-path: services/central-mcp/go.sum
+          go-version-file: services/mach1/go.mod
+          cache-dependency-path: services/mach1/go.sum
       - name: Sync registry-index into Go embed dir
         shell: pwsh
         run: |
@@ -28,7 +27,6 @@ jobs:
           Copy-Item "../../packages/registry-index/index.json" "cmd/mcpapiserver/data/registry-index.json" -Force
       - run: go test -race -timeout 60s ./...
 
-  # ── Deploy mcpapiserver to Railway ──────────────────
   deploy-api:
     needs: go-test
     runs-on: ubuntu-22.04
@@ -49,9 +47,73 @@ jobs:
             echo "::warning::Railway deploy skipped: invalid token, missing access, or service unavailable."
           fi
 
-  # ── Tauri desktop release (all platforms) ───────────
-  tauri-release:
+  mach1-cli-release:
     needs: go-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            goos: windows
+            goarch: amd64
+            asset_name: mach1-windows-amd64.zip
+            archive: zip
+          - platform: macos-latest
+            goos: darwin
+            goarch: amd64
+            asset_name: mach1-darwin-amd64.tar.gz
+            archive: tar.gz
+          - platform: macos-latest
+            goos: darwin
+            goarch: arm64
+            asset_name: mach1-darwin-arm64.tar.gz
+            archive: tar.gz
+          - platform: ubuntu-22.04
+            goos: linux
+            goarch: amd64
+            asset_name: mach1-linux-amd64.tar.gz
+            archive: tar.gz
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/mach1/go.mod
+          cache-dependency-path: services/mach1/go.sum
+      - name: Build mach1 CLI archive
+        shell: pwsh
+        working-directory: services/mach1
+        run: |
+          $distDir = Join-Path (Resolve-Path ../..).Path "dist"
+          New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+          $stageDir = Join-Path $distDir "stage-${{ matrix.goos }}-${{ matrix.goarch }}"
+          if (Test-Path $stageDir) { Remove-Item -Recurse -Force $stageDir }
+          New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
+          $env:GOOS = "${{ matrix.goos }}"
+          $env:GOARCH = "${{ matrix.goarch }}"
+          $env:CGO_ENABLED = "0"
+          $routerName = if ($env:GOOS -eq "windows") { "mach1.exe" } else { "mach1" }
+          $ctlName = if ($env:GOOS -eq "windows") { "mach1ctl.exe" } else { "mach1ctl" }
+          go build -trimpath -ldflags "-s -w" -o (Join-Path $stageDir $routerName) ./cmd/mach1
+          go build -trimpath -ldflags "-s -w" -o (Join-Path $stageDir $ctlName) ./cmd/mach1ctl
+          $assetPath = Join-Path $distDir "${{ matrix.asset_name }}"
+          if (Test-Path $assetPath) { Remove-Item -Force $assetPath }
+          if ("${{ matrix.archive }}" -eq "zip") {
+            Compress-Archive -Path (Join-Path $stageDir '*') -DestinationPath $assetPath -Force
+          } else {
+            tar -czf $assetPath -C $stageDir .
+          }
+      - name: Upload mach1 CLI archive
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: dist/${{ matrix.asset_name }}
+
+  tauri-release:
+    needs: [go-test, mach1-cli-release]
     strategy:
       fail-fast: false
       matrix:
@@ -61,64 +123,58 @@ jobs:
             args: --target x86_64-pc-windows-msvc --bundles nsis,msi
             goos: windows
             goarch: amd64
-            router_name: centralmcpd.exe
+            router_name: mach1.exe
           - platform: macos-latest
             rust_target: x86_64-apple-darwin
             args: --target x86_64-apple-darwin --bundles app,dmg
             goos: darwin
             goarch: amd64
-            router_name: centralmcpd
+            router_name: mach1
           - platform: macos-latest
             rust_target: aarch64-apple-darwin
             args: --target aarch64-apple-darwin --bundles app,dmg
             goos: darwin
             goarch: arm64
-            router_name: centralmcpd
+            router_name: mach1
           - platform: ubuntu-22.04
             rust_target: x86_64-unknown-linux-gnu
             args: --target x86_64-unknown-linux-gnu --bundles appimage,deb,rpm
             goos: linux
             goarch: amd64
-            router_name: centralmcpd
+            router_name: mach1
 
     runs-on: ${{ matrix.platform }}
 
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: services/central-mcp/go.mod
-          cache-dependency-path: services/central-mcp/go.sum
-
+          go-version-file: services/mach1/go.mod
+          cache-dependency-path: services/mach1/go.sum
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust_target }}
-
-      - name: Build bundled centralmcpd
+      - name: Build bundled mach1
         shell: pwsh
-        working-directory: services/central-mcp
+        working-directory: services/mach1
         run: |
           New-Item -ItemType Directory -Force -Path ../../bin | Out-Null
           $env:GOOS = "${{ matrix.goos }}"
           $env:GOARCH = "${{ matrix.goarch }}"
           $env:CGO_ENABLED = "0"
-          go build -trimpath -ldflags "-s -w" -o "../../bin/${{ matrix.router_name }}" ./cmd/centralmcpd
-
+          go build -trimpath -ldflags "-s -w" -o "../../bin/${{ matrix.router_name }}" ./cmd/mach1
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: services/web-ui/src-tauri
-
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: services/web-ui/package-lock.json
-
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -131,11 +187,9 @@ jobs:
             libgtk-3-dev \
             libssl-dev \
             pkg-config
-
       - name: Install frontend deps
         run: npm install
         working-directory: services/web-ui
-
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0
         env:
@@ -151,7 +205,7 @@ jobs:
             See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
 
             ### Auto-update
-            Open 1mcp.in — the app checks for updates on launch and in the background every 4 hours.
+            Open 1mcp.in - the app checks for updates on launch and in the background every 4 hours.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
