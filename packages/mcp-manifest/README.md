@@ -2,9 +2,9 @@
 
 Source-of-truth schema for an installable MCP in 1mcp.in.
 
-- `manifest.schema.json` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â JSON Schema (draft 2020-12). Edit this file and only this file.
+- `manifest.schema.json` — JSON Schema (draft 2020-12). Edit this file and only this file.
 - Go types: generated into `services/mach1/internal/manifest` (see `services/mach1/Makefile`).
-- TS types: generated into `apps/hub/src/lib/manifest.d.ts` (Phase 2).
+- TS types: generated into `services/web-ui/src/lib/manifest.d.ts`.
 
 ## Validation rules worth knowing
 

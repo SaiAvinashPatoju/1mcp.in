@@ -1,10 +1,12 @@
 <script lang="ts">
 	import type { Runtime } from '$lib/types';
+	import { toast } from '$lib/toast';
 
 	export let onClose: () => void;
 	export let onPublish: (data: { name: string; description: string; version: string; runtime: Runtime; tags: string[]; verificationStatus: 'verified' | 'unverified'; fileName: string }) => void;
 
 	const STEPS = ['Upload', 'Details', 'Verification', 'Confirm'];
+	const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 	let step = 0;
 	let file: File | null = null;
 	let dragging = false;
@@ -16,6 +18,8 @@
 	let tags: string[] = [];
 	let verificationStatus: 'verified' | 'unverified' = 'unverified';
 	let submitted = false;
+	let loading = false;
+	let publishError = '';
 	let fileInput: HTMLInputElement;
 
 	function handleDrop(e: DragEvent) {
@@ -37,12 +41,28 @@
 		return true;
 	}
 
-	function handleSubmit() {
+	async function handleSubmit() {
 		submitted = true;
-		setTimeout(() => {
-			onPublish({ name, description, version, runtime, tags, verificationStatus, fileName: file!.name });
-			onClose();
-		}, 1600);
+		loading = true;
+		publishError = '';
+		const publishData = { name, description, version, runtime, tags, verificationStatus, fileName: file!.name };
+		try {
+			if (isTauri) {
+				const { invoke } = await import('@tauri-apps/api/core');
+				await invoke('publish_mcp', { item: publishData });
+			} else {
+				onPublish(publishData);
+				toast.warning('Published locally — connect to cloud to share with the community');
+			}
+		} catch (e: any) {
+			publishError = e?.message ?? 'Publish failed';
+			toast.error('Publish failed: ' + publishError);
+			loading = false;
+			return;
+		}
+		loading = false;
+		toast.success('Published successfully!');
+		setTimeout(() => onClose(), 1200);
 	}
 </script>
 
@@ -160,6 +180,12 @@
 						<p class="text-xs text-white/40 leading-relaxed">Queued for automated security scan (malware, OWASP, data-exfiltration). Verified MCPs rank higher. Review: 24–72h.</p>
 					</button>
 				</div>
+			{:else if loading}
+				<div class="flex flex-col items-center justify-center h-48 gap-3">
+					<div class="w-12 h-12 rounded-full border-2 border-violet-500 border-t-transparent animate-spin"></div>
+					<p class="text-sm font-semibold text-white/90">Publishing...</p>
+					<p class="text-xs text-white/40 text-center max-w-xs">Uploading to the 1mcp marketplace</p>
+				</div>
 			{:else if !submitted}
 				<p class="text-xs text-white/30 mb-5">Review your submission.</p>
 				<div class="space-y-3 bg-black/30 border border-white/[0.06] rounded-xl p-4">
@@ -181,7 +207,7 @@
 				<div class="flex flex-col items-center justify-center h-48 gap-3">
 					<div class="w-12 h-12 rounded-full bg-emerald-900/30 border border-emerald-600 flex items-center justify-center text-emerald-400 text-xl">✓</div>
 					<p class="text-sm font-semibold text-white/90">{verificationStatus === 'verified' ? 'Submitted for Review!' : 'Published!'}</p>
-					<p class="text-xs text-white/40 text-center max-w-xs">{verificationStatus === 'verified' ? "Queued for security review. We'll notify you." : 'Your MCP is now live in the marketplace.'}</p>
+					<p class="text-xs text-white/40 text-center max-w-xs">{verificationStatus === 'verified' ? "Queued for security review. We'll notify you." : 'Your MCP is now live in Discover.'}</p>
 				</div>
 			{/if}
 		</div>

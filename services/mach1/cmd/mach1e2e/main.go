@@ -5,14 +5,14 @@
 // Usage:
 //
 //	mach1e2e --bin path/to/mach1 \
-//	          --config services/mach1/config.example.json \
-//	          --smoke  test/e2e/smokes.json \
-//	          --out    e2e-report.md
+//	 --config services/mach1/config.example.json \
+//	 --smoke test/e2e/smokes.json \
+//	 --out e2e-report.md
 //
 // Exit codes:
-//   0  every MCP responded to tools/list and every smoke call succeeded
-//   1  one or more failures (details in the report)
-//   2  bad input / cannot start mach1
+// 0 every MCP responded to tools/list and every smoke call succeeded
+// 1 one or more failures (details in the report)
+// 2 bad input / cannot start mach1
 package main
 
 import (
@@ -35,20 +35,20 @@ import (
 
 // Smoke is one tool-call to attempt as a smoke test for a given MCP.
 type Smoke struct {
-	MCPID string          `json:"mcpId"`   // matches manifest id
-	Tool  string          `json:"tool"`    // bare tool name (no namespace prefix)
-	Args  json.RawMessage `json:"args"`    // arbitrary JSON arguments
-	Allow []string        `json:"allowOK"` // result substrings any of which mark success (optional)
+	MCPID string `json:"mcpId"` // matches manifest id
+	Tool string `json:"tool"` // bare tool name (no namespace prefix)
+	Args json.RawMessage `json:"args"` // arbitrary JSON arguments
+	Allow []string `json:"allowOK"` // result substrings any of which mark success (optional)
 }
 
 func main() {
 	var (
-		binPath    = flag.String("bin", findDefaultBin(), "path to mach1 binary")
+		binPath = flag.String("bin", findDefaultBin(), "path to mach1 binary")
 		configPath = flag.String("config", "", "passed through as --config")
-		dbPath     = flag.String("db", "", "passed through as --db")
-		smokePath  = flag.String("smoke", "", "JSON array of Smoke entries (optional)")
-		outPath    = flag.String("out", "e2e-report.md", "markdown report output path")
-		timeout    = flag.Duration("timeout", 60*time.Second, "overall test timeout")
+		dbPath = flag.String("db", "", "passed through as --db")
+		smokePath = flag.String("smoke", "", "JSON array of Smoke entries (optional)")
+		outPath = flag.String("out", "e2e-report.md", "markdown report output path")
+		timeout = flag.Duration("timeout", 60*time.Second, "overall test timeout")
 	)
 	flag.Parse()
 
@@ -81,27 +81,27 @@ func main() {
 }
 
 type Report struct {
-	Started     time.Time
-	Init        Latency
-	ToolsList   Latency
-	ToolsTotal  int
-	Tools       map[string][]string // mcpId -> tool names
-	SmokeRuns   []SmokeRun
+	Started time.Time
+	Init Latency
+	ToolsList Latency
+	ToolsTotal int
+	Tools map[string][]string // mcpId -> tool names
+	SmokeRuns []SmokeRun
 	OverallFail string
 }
 
 type Latency struct {
-	OK       bool
+	OK bool
 	Duration time.Duration
-	Err      string
+	Err string
 }
 
 type SmokeRun struct {
-	MCPID    string
-	Tool     string
-	OK       bool
+	MCPID string
+	Tool string
+	OK bool
 	Duration time.Duration
-	Err      string
+	Err string
 }
 
 func runE2E(ctx context.Context, bin, configPath, dbPath string, smokes []Smoke) (*Report, error) {
@@ -141,8 +141,8 @@ func runE2E(ctx context.Context, bin, configPath, dbPath string, smokes []Smoke)
 	rep.Init = timed(func() error {
 		_, err := rpc(ctx, w, r, 1, "initialize", proto.InitializeParams{
 			ProtocolVersion: proto.ProtocolVersion,
-			ClientInfo:      proto.Implementation{Name: "mach1e2e", Version: "0.1.0"},
-			Capabilities:    json.RawMessage(`{}`),
+			ClientInfo: proto.Implementation{Name: "mach1e2e", Version: "0.1.0"},
+			Capabilities: json.RawMessage(`{}`),
 		})
 		return err
 	})
@@ -177,7 +177,7 @@ func runE2E(ctx context.Context, bin, configPath, dbPath string, smokes []Smoke)
 		toolName := sm.MCPID + "__" + sm.Tool
 		t0 := time.Now()
 		resp, err := rpc(ctx, w, r, 100+i, "tools/call", proto.CallToolParams{
-			Name:      toolName,
+			Name: toolName,
 			Arguments: sm.Args,
 		})
 		run.Duration = time.Since(t0)
@@ -195,16 +195,16 @@ func runE2E(ctx context.Context, bin, configPath, dbPath string, smokes []Smoke)
 }
 
 // rpc sends one request and waits for the matching response. Other inbound
-// messages (notifications, mismatched ids) are ignored ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â the central router
+// messages (notifications, mismatched ids) are ignored the central router
 // does not currently send unsolicited messages, so this is safe in MVP.
 func rpc(ctx context.Context, w *framing.Writer, r *framing.Reader, id int, method string, params any) (*proto.Message, error) {
 	rpcID := proto.NewStringID(fmt.Sprintf("e2e-%d", id))
 	rawParams, _ := json.Marshal(params)
 	if err := w.Write(&proto.Message{
 		JSONRPC: proto.Version,
-		ID:      &rpcID,
-		Method:  method,
-		Params:  rawParams,
+		ID: &rpcID,
+		Method: method,
+		Params: rawParams,
 	}); err != nil {
 		return nil, err
 	}

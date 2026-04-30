@@ -1,9 +1,9 @@
 // Package secrets stores per-MCP secret env vars outside the registry SQLite
-// database, in a 0600-permissioned JSON file under the 1mcp.in data dir.
+// database, in a 0600-permissioned file under the 1mcp.in data dir.
 //
-// SECURITY NOTE (MVP): values are stored at rest in plaintext, protected only
-// by file permissions. Phase 3.1 upgrades this to OS keychain (Windows DPAPI,
-// macOS Keychain, libsecret) behind the same interface. Do not log values.
+// Values are encrypted at rest on Windows with DPAPI. Other platforms keep the
+// same interface and permission hardening until their native keychain backends
+// are added. Secret values must never be logged.
 package secrets
 
 import (
@@ -39,7 +39,11 @@ func Open(path string) (*Store, error) {
 	if len(b) == 0 {
 		return s, nil
 	}
-	if err := json.Unmarshal(b, &s.data); err != nil {
+	plaintext, err := unprotectSecretBytes(b)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt secrets: %w", err)
+	}
+	if err := json.Unmarshal(plaintext, &s.data); err != nil {
 		return nil, fmt.Errorf("parse secrets: %w", err)
 	}
 	return s, nil
@@ -102,8 +106,12 @@ func (s *Store) flushLocked() error {
 	if err != nil {
 		return err
 	}
+	sealed, err := protectSecretBytes(b)
+	if err != nil {
+		return fmt.Errorf("encrypt secrets: %w", err)
+	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	if err := os.WriteFile(tmp, sealed, 0o600); err != nil {
 		return fmt.Errorf("write secrets: %w", err)
 	}
 	if err := os.Rename(tmp, s.path); err != nil {

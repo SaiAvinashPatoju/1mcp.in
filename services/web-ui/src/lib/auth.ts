@@ -68,7 +68,7 @@ export async function restoreSession(): Promise<void> {
 		if (res.ok) {
 			const { user: u } = await res.json();
 			user.set(u);
-		} else {
+		} else if (res.status === 401) {
 			clearToken();
 		}
 	} catch {
@@ -144,6 +144,89 @@ export async function signUp(name: string, email: string, password: string): Pro
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : 'Registration failed';
 		authLoading.set(false);
+		throw new Error(msg);
+	} finally {
+		authLoading.set(false);
+	}
+}
+
+export async function updateProfile(name: string, email: string): Promise<void> {
+	const token = getToken();
+	if (!token) {
+		throw new Error('You need to sign in again before updating your account.');
+	}
+
+	authLoading.set(true);
+	try {
+		if (isTauri) {
+			const updated = await invokeDesktop<User>('auth_update_profile', { token, name, email });
+			user.set(updated);
+			return;
+		}
+
+		const res = await fetch(`${API_URL}/api/auth/me`, {
+			method: 'PATCH',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${token}`
+			},
+			body: JSON.stringify({ name, email })
+		});
+
+		if (!res.ok) {
+			const data = await res.json().catch(() => ({}));
+			throw new Error(data.error ?? `HTTP ${res.status}: Profile update failed`);
+		}
+
+		const data = await res.json();
+		if (!data.user) {
+			throw new Error('Invalid response: missing user data');
+		}
+
+		user.set({ id: data.user.id, name: data.user.name, email: data.user.email });
+	} catch (error) {
+		const msg = error instanceof Error ? error.message : 'Profile update failed';
+		throw new Error(msg);
+	} finally {
+		authLoading.set(false);
+	}
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+	const token = getToken();
+	if (!token) {
+		throw new Error('You need to sign in again before changing your password.');
+	}
+
+	authLoading.set(true);
+	try {
+		if (isTauri) {
+			await invokeDesktop<void>('auth_change_password', {
+				token,
+				currentPassword,
+				newPassword
+			});
+			return;
+		}
+
+		const res = await fetch(`${API_URL}/api/auth/password`, {
+			method: 'PATCH',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${token}`
+			},
+			body: JSON.stringify({
+				current_password: currentPassword,
+				new_password: newPassword
+			})
+		});
+
+		if (!res.ok) {
+			const data = await res.json().catch(() => ({}));
+			throw new Error(data.error ?? `HTTP ${res.status}: Password update failed`);
+		}
+	} catch (error) {
+		const msg = error instanceof Error ? error.message : 'Password update failed';
 		throw new Error(msg);
 	} finally {
 		authLoading.set(false);

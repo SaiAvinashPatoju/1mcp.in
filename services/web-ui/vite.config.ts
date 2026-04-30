@@ -8,5 +8,20 @@ export default defineConfig({
 		port: 1420,
 		strictPort: true
 	},
-	envPrefix: ['VITE_', 'TAURI_']
+	envPrefix: ['VITE_', 'TAURI_'],
+	build: {
+		target: 'es2021',
+		minify: 'esbuild',
+		cssMinify: true,
+		reportCompressedSize: false,
+		sourcemap: false,
+		emptyOutDir: true,
+		rollupOptions: {
+			output: {
+				manualChunks: {
+					vendor: ['lucide-svelte', 'clsx']
+				}
+			}
+		}
+	}
 });

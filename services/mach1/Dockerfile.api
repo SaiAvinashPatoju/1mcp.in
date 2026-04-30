@@ -5,7 +5,9 @@ FROM golang:1.26-alpine AS builder
 WORKDIR /app
 COPY services/mach1/go.mod services/mach1/go.sum ./
 RUN go mod download
+COPY packages/registry-index/index.json /tmp/registry-index.json
 COPY services/mach1 ./
+RUN cp /tmp/registry-index.json ./cmd/mcpapiserver/registry-index.json
 RUN go build -trimpath -ldflags "-s -w" -o /mcpapiserver ./cmd/mcpapiserver
 
 FROM alpine:3.19

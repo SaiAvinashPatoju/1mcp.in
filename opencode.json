@@ -14,6 +14,11 @@
       "extensions": [".svelte"]
     }
   },
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 10000
+  },
   "mcp": {
     "github": {
       "type": "local",
@@ -49,6 +54,12 @@
       "environment": {
         "BRAVE_API_KEY": "{env:BRAVE_API_KEY}"
       },
+      "enabled": true
+    },
+    "retix": {
+      "type": "local",
+      "command": ["python", "C:\\projects\\work\\1Mcp\\retix-mcp.py"],
+      "description": "Local vision model for image analysis, OCR, and visual claim verification. Uses Ollama (cross-platform) with moondream or Qwen2.5-VL. Auto-pulls model on first use if not cached.",
       "enabled": true
     }
   },

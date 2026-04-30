@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS installed_mcps (
     enabled       INTEGER NOT NULL DEFAULT 1,
     runtime       TEXT NOT NULL,
     command       TEXT NOT NULL,
+    description   TEXT NOT NULL DEFAULT '',
     args_json     TEXT NOT NULL DEFAULT '[]',
     env_json      TEXT NOT NULL DEFAULT '{}',
     cwd           TEXT NOT NULL DEFAULT '',
@@ -94,6 +95,13 @@ func Open(path string) (*DB, error) {
 	}
 	// modernc/sqlite: keep a small pool to avoid SQLITE_BUSY under contention.
 	sdb.SetMaxOpenConns(4)
+	// WAL mode enables concurrent readers even while a writer is active.
+	// The Tauri Hub UI holds a connection to the same DB, so this prevents
+	// SQLITE_BUSY when both processes access the file at the same time.
+	if _, err := sdb.Exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;"); err != nil {
+		_ = sdb.Close()
+		return nil, fmt.Errorf("set WAL: %w", err)
+	}
 	if _, err := sdb.Exec(Schema); err != nil {
 		_ = sdb.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)

@@ -9,7 +9,14 @@
     "build": "svelte-kit sync && npm run prepare:router && vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test e2e/smoke/",
+    "test:e2e:quality": "playwright test e2e/quality/",
+    "test:e2e:stress": "playwright test e2e/stress/ --workers=1",
+    "test:e2e:integration": "playwright test e2e/integration/"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.2.0",
@@ -22,16 +29,21 @@
     "lucide-svelte": "^0.468.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@sveltejs/adapter-static": "^3.0.8",
     "@sveltejs/kit": "^2.15.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@tauri-apps/cli": "^2.2.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/svelte": "^5.3.1",
     "autoprefixer": "^10.4.20",
+    "jsdom": "^25.0.1",
     "postcss": "^8.4.49",
     "svelte": "^5.15.0",
     "svelte-check": "^4.1.0",
     "tailwindcss": "^3.4.16",
     "typescript": "^5.7.2",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vitest": "^3.2.4"
   }
 }

@@ -66,7 +66,7 @@
 			<!-- Command -->
 			<div>
 				<p class="text-xs font-semibold text-white/30 uppercase tracking-wider mb-2">Command</p>
-				<code class="block text-xs text-white/70 bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2.5 font-mono break-all leading-relaxed">{mcp.command}</code>
+				<code class="block text-xs text-white/70 bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2.5 font-mono break-all leading-relaxed">{mcp.command}{mcp.args ? ' ' + mcp.args.join(' ') : ''}</code>
 			</div>
 
 			<!-- PAT -->

@@ -23,8 +23,7 @@ jobs:
       - name: Sync registry-index into Go embed dir
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "cmd/mcpapiserver/data" | Out-Null
-          Copy-Item "../../packages/registry-index/index.json" "cmd/mcpapiserver/data/registry-index.json" -Force
+          Copy-Item "../../packages/registry-index/index.json" "cmd/mcpapiserver/registry-index.json" -Force
       - run: go test -race -timeout 60s ./...
 
   deploy-api:

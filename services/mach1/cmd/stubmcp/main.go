@@ -2,10 +2,10 @@
 // mach1 without external runtimes (no npm, no python, no docker).
 //
 // It implements:
-//   - initialize          Ã¢â€ â€™ returns server info
-//   - tools/list          Ã¢â€ â€™ returns one "echo" tool
-//   - tools/call(echo)    Ã¢â€ â€™ returns the arguments verbatim wrapped in a content block
-//   - ping                Ã¢â€ â€™ empty result
+//   - initialize          Ã¢â€ â€™ returns server info
+//   - tools/list          Ã¢â€ â€™ returns one "echo" tool
+//   - tools/call(echo)    Ã¢â€ â€™ returns the arguments verbatim wrapped in a content block
+//   - ping                Ã¢â€ â€™ empty result
 //
 // All other methods return method-not-found.
 package main

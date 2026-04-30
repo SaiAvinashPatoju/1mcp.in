@@ -4,8 +4,10 @@ go 1.25.0
 
 require (
 	github.com/jackc/pgx/v5 v5.9.2
+	github.com/pelletier/go-toml/v2 v2.3.0
 	go.opentelemetry.io/otel v1.43.0
 	golang.org/x/crypto v0.50.0
+	golang.org/x/sys v0.43.0
 	modernc.org/sqlite v1.29.10
 )
 
@@ -26,7 +28,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 	modernc.org/libc v1.49.3 // indirect

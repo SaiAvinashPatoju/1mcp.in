@@ -15,8 +15,7 @@ if ! command -v go >/dev/null 2>&1; then
 fi
 
 echo "Syncing registry-index into API embed dir..."
-mkdir -p "${SERVICE_DIR}/cmd/mcpapiserver/data"
-cp "${REPO_ROOT}/packages/registry-index/index.json" "${SERVICE_DIR}/cmd/mcpapiserver/data/registry-index.json"
+cp "${REPO_ROOT}/packages/registry-index/index.json" "${SERVICE_DIR}/cmd/mcpapiserver/registry-index.json"
 
 echo "Building mach1 and CLI binaries..."
 pushd "${SERVICE_DIR}" >/dev/null

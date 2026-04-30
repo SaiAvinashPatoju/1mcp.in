@@ -2,74 +2,127 @@
 
 1mcp.in is a lightweight, high-performance router that lets you manage multiple Model Context Protocol (MCP) servers behind a single entry point.
 
-## 1. Installation & Environment
-The binaries are located in the `bin/` directory. For the best experience, add this directory to your system `PATH`.
+## 1. Install
 
-```powershell
-# Temporary PATH for current session
-$env:Path += ";C:\projects\work\Mach1\bin"
+### One-command install (recommended)
+
+```bash
+# macOS / Linux
+curl -fsSL https://install.1mcp.in | sh
+
+# Windows PowerShell
+irm https://install.1mcp.in/windows | iex
 ```
 
-Verify the installation with the "doctor" command:
-```powershell
+### Build from source
+
+```bash
+git clone https://github.com/SaiAvinashPatoju/1mcp.in.git
+cd 1mcp.in
+
+# Windows
+pwsh -ExecutionPolicy Bypass -File scripts/build.ps1
+
+# macOS / Linux
+bash scripts/build.sh
+
+# Add bin/ to your PATH for convenience
+$env:Path += ";$pwd\bin"           # PowerShell
+export PATH="$PWD/bin:$PATH"       # bash/zsh
+```
+
+Verify the installation:
+
+```bash
 mach1ctl doctor
 ```
 
-## 2. Navigating the "Market" (Catalog)
-1mcp.in comes with a built-in catalog of popular MCP servers.
+## 2. Start the Router
 
-**List available servers:**
-```powershell
+```bash
+mach1ctl start
+```
+
+This launches the `mach1` router and the Hub UI at `http://localhost:5173`.
+
+## 3. Browse & Install MCPs from the Marketplace
+
+Open the Hub UI (`http://localhost:5173`) and go to the **Discover** tab. Browse 18+ curated MCPs and click **Install** on any server.
+
+Or use the CLI:
+
+```bash
+# List available MCPs
 mach1ctl catalog list
-```
 
-**Install a server (e.g., Knowledge Graph Memory):**
-```powershell
+# Install one (e.g., Knowledge Graph Memory)
 mach1ctl install memory
-```
 
-**Configure required environment variables:**
-If a server requires configuration (like `filesystem` needing a root path), the CLI will notify you.
-```powershell
+# Configure required environment variables
 mach1ctl env set filesystem MACH1_FS_ROOT="C:\my-allowed-folder"
 ```
 
-## 3. Adding 1mcp.in to VS Code & Other Clients
-1mcp.in can automatically configure your favorite AI tools to use the central router.
+## 4. Connect to Your AI Clients
 
-### For VS Code (GitHub Copilot / Roo Code / Continue)
-```powershell
+1mcp.in auto-configures your AI tools to use the central router.
+
+```bash
+# VS Code (GitHub Copilot / Continue / Roo Code)
 mach1ctl connect vscode
-```
-This updates `%APPDATA%\Code\User\mcp.json`. 1mcp.in will now appear as a single server with access to all your installed MCPs.
 
-### For Cursor or Claude Desktop
-```powershell
+# Cursor
 mach1ctl connect cursor
+
+# Claude Desktop
 mach1ctl connect claude
+
+# Claude Code
+mach1ctl connect claude-code
 ```
 
-## 4. Managing Installed Servers
-**List your active router configuration:**
-```powershell
+After connecting, restart your AI client. It will see a single MCP server (`mach1`) with all your installed MCP tools namespaced (e.g., `github__list_pull_requests`, `memory__create_entities`).
+
+## 5. Manage Installed Servers
+
+```bash
+# List active router configuration
 mach1ctl list
+
+# Enable / Disable / Uninstall
+mach1ctl enable filesystem
+mach1ctl disable filesystem
+mach1ctl uninstall filesystem
 ```
 
-**Enable/Disable/Uninstall:**
-```powershell
-mach1ctl disable memory
-mach1ctl enable memory
-mach1ctl uninstall memory
+All of these operations are also available from the Hub UI (Servers / Discover tabs).
+
+## 6. Run the Router Manually (Advanced)
+
+```bash
+# stdio mode (default)
+mach1 --db "$HOME/.mach1/registry.db" --log debug
+
+# Streamable HTTP mode
+mach1 --transport http --listen 127.0.0.1:3000
 ```
 
-## 5. Running the Backend Manually (Advanced)
-The CLI handles the background process for you, but you can run the daemon directly for debugging:
-```powershell
-mach1 --log debug
-```
+Metrics are available at `127.0.0.1:3031/metrics` in stdio mode.
 
-## 6. Testing Your Setup
-Run the end-to-end smoke test suite to ensure everything is connected:
-```powershell
-mach1e2e --bin bin\mach1.exe
+## 7. Run Tests
+
+```bash
+cd services/web-ui
+
+# Unit tests
+npm run test
+
+# E2E smoke tests
+npm run test:e2e:smoke
+
+# Full quality suite (108 tests)
+npm run test:e2e:quality
+
+# Go tests
+cd services/mach1
+go test ./...
 ```

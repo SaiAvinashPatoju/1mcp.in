@@ -180,7 +180,7 @@
       }
     },
     "verification": "anthropic-official",
-    "sha256": "f11f1837aa426c825f42d4b96516d973a7ebf232441cb5835f09dd422555603b"
+    "sha256": "c0f6fe826f823b244623e3f2b13e4a744ba4ccae604957960b402f703fec1424"
   },
   {
     "id": "git",
@@ -212,7 +212,7 @@
       }
     ],
     "verification": "anthropic-official",
-    "sha256": "d0a3f2089c091908dde459c4a3bc10cae545f901ae01f5a8e6420e4e3d4b4bc7"
+    "sha256": "c588b23498152e0bd24deb3076422244cd627a10c040aed7de2561168ae265e1"
   },
   {
     "id": "github",
@@ -321,7 +321,7 @@
       "network": true
     },
     "verification": "community",
-    "sha256": "5196a59007360c56799319547d2fd088bc945f7228a6e6d9970747d257413c68"
+    "sha256": "2fd230c24158e98f839ea86523354d4069bdb0439d7108bfa377492e021aacaa"
   },
   {
     "id": "memory",

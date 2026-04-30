@@ -9,6 +9,7 @@ package clouddb
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS marketplace_items (
     description  TEXT NOT NULL DEFAULT '',
     version      TEXT NOT NULL,
     runtime      TEXT NOT NULL,
+    transport    TEXT NOT NULL DEFAULT 'stdio',
     author_email TEXT NOT NULL DEFAULT '',
     tags         TEXT NOT NULL DEFAULT '[]',
     homepage     TEXT NOT NULL DEFAULT '',
@@ -47,31 +49,66 @@ CREATE TABLE IF NOT EXISTS marketplace_items (
 	verification TEXT NOT NULL DEFAULT 'community',
 	sha256       TEXT NOT NULL DEFAULT '',
 	signature    TEXT NOT NULL DEFAULT '',
+    entrypoint_command TEXT NOT NULL DEFAULT '',
+    entrypoint_args    TEXT NOT NULL DEFAULT '[]',
+    published_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS skills (
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    description  TEXT NOT NULL DEFAULT '',
+    icon         TEXT NOT NULL DEFAULT '',
+    mcp_ids      TEXT NOT NULL DEFAULT '[]',
     published_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 `
 
 const marketplaceTrustMigration = `
+ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS author_email TEXT NOT NULL DEFAULT '';
+ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS tags TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS homepage TEXT NOT NULL DEFAULT '';
+ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS license TEXT NOT NULL DEFAULT '';
 ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS verification TEXT NOT NULL DEFAULT 'community';
 ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS sha256 TEXT NOT NULL DEFAULT '';
 ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS signature TEXT NOT NULL DEFAULT '';
+ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS transport TEXT NOT NULL DEFAULT 'stdio';
+ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS entrypoint_command TEXT NOT NULL DEFAULT '';
+ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS entrypoint_args TEXT NOT NULL DEFAULT '[]';
 `
 
 // MarketplaceItem is a row in marketplace_items. Tags is a JSON array string.
 type MarketplaceItem struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Description  string   `json:"description"`
-	Version      string   `json:"version"`
-	Runtime      string   `json:"runtime"`
-	AuthorEmail  string   `json:"author_email,omitempty"`
-	Tags         []string `json:"tags"`
-	Homepage     string   `json:"homepage,omitempty"`
-	License      string   `json:"license,omitempty"`
-	Verification string   `json:"verification,omitempty"`
-	SHA256       string   `json:"sha256,omitempty"`
-	Signature    string   `json:"signature,omitempty"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	Description  string     `json:"description"`
+	Version      string     `json:"version"`
+	Runtime      string     `json:"runtime"`
+	Transport    string     `json:"transport,omitempty"`
+	AuthorEmail  string     `json:"author_email,omitempty"`
+	Tags         []string   `json:"tags"`
+	Homepage     string     `json:"homepage,omitempty"`
+	License      string     `json:"license,omitempty"`
+	Verification string     `json:"verification,omitempty"`
+	SHA256       string     `json:"sha256,omitempty"`
+	Signature    string     `json:"signature,omitempty"`
+	Entrypoint   Entrypoint `json:"entrypoint,omitempty"`
+}
+
+type Entrypoint struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args,omitempty"`
+	Cwd     string   `json:"cwd,omitempty"`
+}
+
+type Skill struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Icon        string   `json:"icon"`
+	MCPIDs      []string `json:"mcp_ids"`
 }
 
 // User is a registered account row.
@@ -156,7 +193,8 @@ func (d *DB) FindUserByEmail(ctx context.Context, email string) (*User, error) {
 	return u, nil
 }
 
-// CreateSession generates a random opaque token, stores it, and returns it.
+// CreateSession generates a random opaque token, stores only its SHA-256 hash,
+// and returns the raw token once to the caller.
 func (d *DB) CreateSession(ctx context.Context, userID string) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -165,7 +203,7 @@ func (d *DB) CreateSession(ctx context.Context, userID string) (string, error) {
 	token := hex.EncodeToString(b)
 	_, err := d.pool.Exec(ctx,
 		`INSERT INTO user_sessions (token, user_id) VALUES ($1, $2)`,
-		token, userID,
+		sessionTokenHash(token), userID,
 	)
 	if err != nil {
 		return "", fmt.Errorf("clouddb: create session: %w", err)
@@ -182,7 +220,7 @@ func (d *DB) ValidateSession(ctx context.Context, token string) (*User, error) {
 		 FROM user_sessions s
 		 JOIN users u ON u.id = s.user_id
 		 WHERE s.token = $1 AND s.expires_at > now()`,
-		token,
+		sessionTokenHash(token),
 	).Scan(&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("clouddb: validate session: %w", err)
@@ -203,23 +241,28 @@ func (d *DB) GetUserCount(ctx context.Context) (int64, error) {
 func (d *DB) UpsertMarketplaceItems(ctx context.Context, items []MarketplaceItem) error {
 	for _, item := range items {
 		tagsJSON, _ := json.Marshal(item.Tags)
+		entrypointArgsJSON, _ := json.Marshal(item.Entrypoint.Args)
 		_, err := d.pool.Exec(ctx, `
-			INSERT INTO marketplace_items (id, name, description, version, runtime, author_email, tags, homepage, license, verification, sha256, signature, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+			INSERT INTO marketplace_items (id, name, description, version, runtime, transport, author_email, tags, homepage, license, verification, sha256, signature, entrypoint_command, entrypoint_args, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now())
 			ON CONFLICT (id) DO UPDATE SET
 				name         = EXCLUDED.name,
 				description  = EXCLUDED.description,
 				version      = EXCLUDED.version,
 				runtime      = EXCLUDED.runtime,
+				transport    = EXCLUDED.transport,
 				tags         = EXCLUDED.tags,
 				homepage     = EXCLUDED.homepage,
 				license      = EXCLUDED.license,
 				verification = EXCLUDED.verification,
 				sha256       = EXCLUDED.sha256,
 				signature    = EXCLUDED.signature,
+				entrypoint_command = EXCLUDED.entrypoint_command,
+				entrypoint_args = EXCLUDED.entrypoint_args,
 				updated_at   = now()`,
-			item.ID, item.Name, item.Description, item.Version, item.Runtime,
+			item.ID, item.Name, item.Description, item.Version, item.Runtime, item.Transport,
 			item.AuthorEmail, string(tagsJSON), item.Homepage, item.License, item.Verification, item.SHA256, item.Signature,
+			item.Entrypoint.Command, string(entrypointArgsJSON),
 		)
 		if err != nil {
 			return fmt.Errorf("clouddb: upsert marketplace item %s: %w", item.ID, err)
@@ -228,10 +271,15 @@ func (d *DB) UpsertMarketplaceItems(ctx context.Context, items []MarketplaceItem
 	return nil
 }
 
+func sessionTokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
 // GetMarketplaceItems returns all marketplace items ordered by name.
 func (d *DB) GetMarketplaceItems(ctx context.Context) ([]MarketplaceItem, error) {
 	rows, err := d.pool.Query(ctx, `
-		SELECT id, name, description, version, runtime, author_email, tags, homepage, license, verification, sha256, signature
+		SELECT id, name, description, version, runtime, transport, author_email, tags, homepage, license, verification, sha256, signature, entrypoint_command, entrypoint_args
 		FROM marketplace_items
 		ORDER BY name`)
 	if err != nil {
@@ -243,12 +291,85 @@ func (d *DB) GetMarketplaceItems(ctx context.Context) ([]MarketplaceItem, error)
 	for rows.Next() {
 		var item MarketplaceItem
 		var tagsJSON string
+		var entrypointArgsJSON string
 		if err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Version,
-			&item.Runtime, &item.AuthorEmail, &tagsJSON, &item.Homepage, &item.License, &item.Verification, &item.SHA256, &item.Signature); err != nil {
+			&item.Runtime, &item.Transport, &item.AuthorEmail, &tagsJSON, &item.Homepage, &item.License, &item.Verification, &item.SHA256, &item.Signature, &item.Entrypoint.Command, &entrypointArgsJSON); err != nil {
 			return nil, fmt.Errorf("clouddb: scan marketplace item: %w", err)
 		}
 		_ = json.Unmarshal([]byte(tagsJSON), &item.Tags)
+		_ = json.Unmarshal([]byte(entrypointArgsJSON), &item.Entrypoint.Args)
 		out = append(out, item)
 	}
 	return out, rows.Err()
+}
+
+func (d *DB) UpsertSkills(ctx context.Context, skills []Skill) error {
+	for _, skill := range skills {
+		mcpIDsJSON, _ := json.Marshal(skill.MCPIDs)
+		_, err := d.pool.Exec(ctx, `
+			INSERT INTO skills (id, name, description, icon, mcp_ids, updated_at)
+			VALUES ($1, $2, $3, $4, $5, now())
+			ON CONFLICT (id) DO UPDATE SET
+				name        = EXCLUDED.name,
+				description = EXCLUDED.description,
+				icon        = EXCLUDED.icon,
+				mcp_ids     = EXCLUDED.mcp_ids,
+				updated_at  = now()`,
+			skill.ID, skill.Name, skill.Description, skill.Icon, string(mcpIDsJSON),
+		)
+		if err != nil {
+			return fmt.Errorf("clouddb: upsert skill %s: %w", skill.ID, err)
+		}
+	}
+	return nil
+}
+
+func (d *DB) GetSkills(ctx context.Context) ([]Skill, error) {
+	rows, err := d.pool.Query(ctx, `
+		SELECT id, name, description, icon, mcp_ids
+		FROM skills
+		ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("clouddb: list skills: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Skill
+	for rows.Next() {
+		var skill Skill
+		var mcpIDsJSON string
+		if err := rows.Scan(&skill.ID, &skill.Name, &skill.Description, &skill.Icon, &mcpIDsJSON); err != nil {
+			return nil, fmt.Errorf("clouddb: scan skill: %w", err)
+		}
+		_ = json.Unmarshal([]byte(mcpIDsJSON), &skill.MCPIDs)
+		out = append(out, skill)
+	}
+	return out, rows.Err()
+}
+
+func (d *DB) UpdateUserProfile(ctx context.Context, userID, name, email string) (*User, error) {
+	u := &User{}
+	err := d.pool.QueryRow(ctx,
+		`UPDATE users
+		 SET name = $2, email = $3
+		 WHERE id = $1
+		 RETURNING id, name, email, password_hash, created_at`,
+		userID, name, email,
+	).Scan(&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("clouddb: update user profile: %w", err)
+	}
+	return u, nil
+}
+
+func (d *DB) UpdateUserPasswordHash(ctx context.Context, userID, passwordHash string) error {
+	if _, err := d.pool.Exec(ctx,
+		`UPDATE users
+		 SET password_hash = $2
+		 WHERE id = $1`,
+		userID, passwordHash,
+	); err != nil {
+		return fmt.Errorf("clouddb: update user password: %w", err)
+	}
+	return nil
 }

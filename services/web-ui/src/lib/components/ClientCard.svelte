@@ -10,30 +10,88 @@
 	let showManual = false;
 	let removing = false;
 
+	const daemonUrl = 'http://127.0.0.1:3200/mcp';
+
 	const manualInstructions: Record<string, string> = {
-		vscode: '1. Run "MCP: Open User Configuration" in VS Code\n2. Add under "servers":\n   "mach1": { "command": "<absolute-path-to-mach1>", "args": ["--db", "<path-to-db>"] }',
-		cursor: '1. Create/edit ~/.cursor/mcp.json\n2. Add under "mcpServers":\n   "mach1": { "command": "<absolute-path-to-mach1>", "args": ["--db", "<path-to-db>"] }',
-		claude: '1. Open Claude Desktop -> Settings -> Developer -> Edit Config\n2. Add under "mcpServers":\n   "mach1": { "command": "<absolute-path-to-mach1>", "args": ["--db", "<path-to-db>"] }',
-		claudecode: '1. Edit ~/.claude.json\n2. Add under "mcpServers":\n   "mach1": { "command": "<absolute-path-to-mach1>", "args": ["--db", "<path-to-db>"] }',
-		windsurf: '1. Edit ~/.codeium/windsurf/mcp_config.json\n2. Add under "mcpServers":\n   "mach1": { "command": "<absolute-path-to-mach1>", "args": ["--db", "<path-to-db>"] }',
-		codex: '1. Edit ~/.codex/mcp.json\n2. Add under "mcpServers":\n   "mach1": { "command": "<absolute-path-to-mach1>", "args": ["--db", "<path-to-db>"] }',
-		opencode: '1. Edit ~/.config/opencode/opencode.json\n2. Add under "mcp":\n   "mach1": { "type": "local", "command": ["<absolute-path-to-mach1>", "--db", "<path-to-db>"], "enabled": true }',
+		vscode: `Add to your VS Code mcp.json (run "MCP: Open User Configuration" from Command Palette):
+
+"mach1": {
+  "type": "http",
+  "url": "${daemonUrl}"
+}`,
+
+		cursor: `Add to ~/.cursor/mcp.json:
+
+"mach1": {
+  "url": "${daemonUrl}"
+}`,
+
+		claude: `Add to Claude Desktop's claude_desktop_config.json:
+
+"mach1": {
+  "command": "<path-to-mach1>",
+  "args": ["--db", "<path-to-registry.db>"]
+}
+
+Claude Desktop's local config path is stdio-only, so it uses the local spawn fallback.`,
+
+		claudecode: `Add to ~/.claude.json under "mcpServers":
+
+"mach1": {
+  "type": "http",
+  "url": "${daemonUrl}"
+}
+
+Or use the CLI:
+claude mcp add --transport http mach1 ${daemonUrl}`,
+
+		windsurf: `Add to ~/.codeium/mcp_config.json:
+
+"mach1": {
+  "serverUrl": "${daemonUrl}"
+}`,
+
+		codex: `Add to ~/.codex/config.toml:
+
+[mcp_servers.mach1]
+url = "${daemonUrl}"
+type = "http"`,
+
+		antigravity: `Add to ~/.antigravity/mcp.json:
+
+"mach1": {
+  "type": "http",
+  "url": "${daemonUrl}"
+}`,
+
+		opencode: `Add to ~/.config/opencode/opencode.json:
+
+"mach1": {
+  "type": "remote",
+  "url": "${daemonUrl}",
+  "enabled": true
+}`,
 	};
 
 	async function handleSetup() {
 		if (!isTauri) {
 			showManual = !showManual;
+			if (showManual) {
+				setTimeout(() => {
+					alert('Desktop app required for auto-setup. Use the manual instructions shown below to configure your IDE.');
+				}, 100);
+			}
 			return;
 		}
 		settingUp = true;
 		try {
-			await connectClient(client.id);
-		} catch (e: any) {
-			const msg = typeof e === 'string' ? e : e?.message ?? 'Unknown error';
-			if (msg.includes('not yet supported')) {
+				await connectClient(client.id);
+		} catch (error: unknown) {
+			const message = typeof error === 'string' ? error : error instanceof Error ? error.message : 'Unknown error';
+			if (message.includes('not yet supported')) {
 				showManual = true;
 			} else {
-				alert(`Setup failed: ${msg}\n\nPlease configure manually.`);
+				alert(`Setup failed: ${message}\n\nPlease configure manually using the instructions below.`);
 				showManual = true;
 			}
 		}
@@ -44,9 +102,9 @@
 		removing = true;
 		try {
 			await disconnectClient(client.id);
-		} catch (e: any) {
-			const msg = typeof e === 'string' ? e : e?.message ?? 'Unknown error';
-			alert(`Disconnect failed: ${msg}`);
+		} catch (error: unknown) {
+			const message = typeof error === 'string' ? error : error instanceof Error ? error.message : 'Unknown error';
+			alert(`Disconnect failed: ${message}`);
 		}
 		removing = false;
 	}
@@ -87,7 +145,7 @@
 
 {#if showManual}
 	<div class="mt-2 ml-12 p-3 rounded-lg bg-black/40 border border-white/[0.06] text-xs font-mono text-white/60 whitespace-pre-line leading-relaxed">
-		{manualInstructions[client.id] ?? 'Add "mach1" to your client\'s MCP server configuration with command "mach1".'}
+		{manualInstructions[client.id] ?? 'Add "mach1" to your client MCP configuration and point it at http://127.0.0.1:3200/mcp.'}
 		<button on:click={() => showManual = false} class="mt-2 block text-violet-400 hover:text-violet-300 font-sans text-[11px]">Dismiss</button>
 	</div>
 {/if}

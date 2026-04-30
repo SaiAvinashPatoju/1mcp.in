@@ -1,26 +1,74 @@
 /bin/
 /oss/
-/CLAUDE.md
 *.exe
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
 
-# Tauri / Node (Phase 2+)
+# Tauri / Node
 node_modules/
 dist/
 .svelte-kit/
 **/src-tauri/target/
 **/src-tauri/gen/
+**/src-tauri/resources/
 services/web-ui/build/
-.env.local
-.env*.local
 
 # Go
 /services/mach1/mach1
 /services/mach1/mach1.exe
 
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+.env.production
+*.pem
+*.key
+*.p12
+credentials.json
+secrets.json
+
+# Generated outputs
+e2e-report.md
+services/mach1/cmd/mcpapiserver/data/
+services/mach1/cmd/mcpapiserver/registry-index.json
+services/mach1/cmd/mcpapiserver/skills.json
+
+# Agent instructions (not for repo)
+CLAUDE.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
 # OS
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# Website
+website/
+
+# Vite dev logs
+vite-dev*.log
+vite-live*.log
+vite-dev.err.log
+vite-dev.out.log
+
+# Test artifacts
+test-results/
+playwright-report/
+
+# Team Pro (private)
+team/
+
+# Local tooling / scratch
+retix-mcp.py
+screenshots/
+
+# AI-generated trash
+Gemini_Generated_Image_*.png

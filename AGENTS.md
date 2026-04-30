@@ -40,7 +40,7 @@ Every developer on a team configures MCPs individually — 10 developers means 1
 ## Repository Structure
 
 ```
-1mcp.in/                          ← PUBLIC (open source, MIT)
+1mcp.in/                          ← PUBLIC (open source, Apache 2.0)
 ├── services/
 │   ├── mach1/              ← Go router, supervisor, sandbox, CLI
 │   │   ├── cmd/
@@ -757,3 +757,7 @@ If you are an AI agent working on this codebase:
 12. **Subagent delegation for UI work.** When asked to update the Local Hub UI or Team UI, ALWAYS delegate to the `@ui-builder` subagent. It handles SvelteKit, TypeScript, and Tauri (Rust) tasks.
 13. **Plan before Build.** Before executing any bash command to change architecture, map out the change to ensure it doesn't violate process isolation (Docker/seccomp) or OpenTelemetry requirements.
 14. **Subagent scope is read-only.** When invoking `@go-architect` or `@ui-builder`, their file writes are limited to their domain. Cross-boundary changes (e.g., a UI subagent modifying Go router code) must be reviewed before write.
+
+### Available Tools
+
+15. **retix (local vision model).** A local vision MCP server is available via `retix` in `opencode.json`. Use `describe_image` to analyze screenshots, `ocr_image` to extract text from images, and `check_image` to verify visual claims. On macOS with Apple Silicon, this runs MLX-VLM locally. On other platforms, it returns guidance to the user. Use this whenever the user shares an image or asks about visual content.

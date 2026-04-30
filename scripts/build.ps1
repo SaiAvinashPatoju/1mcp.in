@@ -19,9 +19,9 @@ if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
 
 Push-Location $serviceDir
 try {
-    # Keep data/registry-index.json in sync with packages/registry-index/index.json
+    # Keep cmd/mcpapiserver/registry-index.json in sync with packages/registry-index/index.json
     $registrySrc  = Join-Path $repoRoot "packages\registry-index\index.json"
-    $registryDest = Join-Path $serviceDir "cmd\mcpapiserver\data\registry-index.json"
+    $registryDest = Join-Path $serviceDir "cmd\mcpapiserver\registry-index.json"
     if (Test-Path $registrySrc) {
         New-Item -ItemType Directory -Force -Path (Split-Path $registryDest) | Out-Null
         Copy-Item -Path $registrySrc -Destination $registryDest -Force
