@@ -27,6 +27,11 @@ try {
         Copy-Item -Path $registrySrc -Destination $registryDest -Force
         Write-Host "Synced registry-index -> $registryDest"
     }
+    $skillsDest = Join-Path $serviceDir "cmd\mcpapiserver\skills.json"
+    if (-not (Test-Path $skillsDest)) {
+        Set-Content -Path $skillsDest -Value "[]"
+        Write-Host "Created skills.json -> $skillsDest"
+    }
 
     Write-Host "go mod tidy"
     go mod tidy

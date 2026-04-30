@@ -20,10 +20,11 @@ jobs:
         with:
           go-version-file: services/mach1/go.mod
           cache-dependency-path: services/mach1/go.sum
-      - name: Sync registry-index into Go embed dir
+      - name: Sync registry-index and skills into Go embed dir
         shell: pwsh
         run: |
           Copy-Item "../../packages/registry-index/index.json" "cmd/mcpapiserver/registry-index.json" -Force
+          if (-not (Test-Path "cmd/mcpapiserver/skills.json")) { Set-Content "cmd/mcpapiserver/skills.json" "[]" }
       - run: go test -race -timeout 60s ./...
 
   deploy-api:

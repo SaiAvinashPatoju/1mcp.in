@@ -19,7 +19,7 @@ export default defineConfig({
 		rollupOptions: {
 			output: {
 				manualChunks: {
-					vendor: ['lucide-svelte', 'clsx']
+					vendor: ['lucide-svelte']
 				}
 			}
 		}

@@ -14,8 +14,11 @@ if ! command -v go >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Syncing registry-index into API embed dir..."
+echo "Syncing registry-index and skills into API embed dir..."
 cp "${REPO_ROOT}/packages/registry-index/index.json" "${SERVICE_DIR}/cmd/mcpapiserver/registry-index.json"
+if [ ! -f "${SERVICE_DIR}/cmd/mcpapiserver/skills.json" ]; then
+  echo '[]' > "${SERVICE_DIR}/cmd/mcpapiserver/skills.json"
+fi
 
 echo "Building mach1 and CLI binaries..."
 pushd "${SERVICE_DIR}" >/dev/null
