@@ -121,6 +121,9 @@ func main() {
 	mux.HandleFunc("POST /api/settings/reset", handleResetRouter())
 	mux.HandleFunc("POST /api/settings/clear-data", handleClearData())
 	mux.HandleFunc("GET /api/settings/diagnostics", handleDiagnostics())
+	mux.HandleFunc("GET /install", handleInstallRedirect())
+	mux.HandleFunc("GET /install.sh", handleInstallScript("bash"))
+	mux.HandleFunc("GET /install.ps1", handleInstallScript("powershell"))
 	registerOAuthHandlers(mux, newOAuthStore(), strings.TrimRight(issuer, "/"))
 
 	// Seed marketplace from embedded registry-index on startup
@@ -1004,6 +1007,83 @@ func seedMarketplace(ctx context.Context, db *clouddb.DB) error {
 		return err
 	}
 	return db.UpsertMarketplaceItems(ctx, items)
+}
+
+func handleInstallRedirect() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ua := r.UserAgent()
+		if strings.Contains(ua, "Windows") || strings.Contains(ua, "PowerShell") {
+			http.Redirect(w, r, "/install.ps1", http.StatusFound)
+		} else {
+			http.Redirect(w, r, "/install.sh", http.StatusFound)
+		}
+	}
+}
+
+func handleInstallScript(kind string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		if kind == "powershell" {
+			w.Write([]byte(`[CmdletBinding()]
+param(
+    [string]$Version = $env:MACH1_VERSION,
+    [string]$InstallDir = $env:MACH1_INSTALL_DIR,
+    [string]$Owner = "SaiAvinashPatoju",
+    [string]$Repo = "1mcp.in"
+)
+$ErrorActionPreference = "Stop"
+if (-not $Version) { $Version = "latest" }
+if (-not $InstallDir) { $InstallDir = Join-Path $env:LOCALAPPDATA "1mcp\bin" }
+$arch = if ([Environment]::Is64BitOperatingSystem) { "amd64" } else { throw "Unsupported architecture" }
+$asset = "mach1-windows-$arch.zip"
+$api = if ($Version -eq "latest") { "https://api.github.com/repos/$Owner/$Repo/releases/latest" } else { "https://api.github.com/repos/$Owner/$Repo/releases/tags/$Version" }
+$release = Invoke-RestMethod -Uri $api -Headers @{ "User-Agent" = "1mcp-installer" }
+$download = ($release.assets | Where-Object { $_.name -eq $asset } | Select-Object -First 1).browser_download_url
+if (-not $download) { throw "Could not find release asset $asset" }
+New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+$tmp = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
+New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+try {
+    $zip = Join-Path $tmp $asset
+    Invoke-WebRequest -Uri $download -OutFile $zip
+    Expand-Archive -Path $zip -DestinationPath $InstallDir -Force
+} finally { Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue }
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if (($userPath -split ';') -notcontains $InstallDir) {
+    [Environment]::SetEnvironmentVariable("Path", "$InstallDir;$userPath", "User")
+    $env:Path = "$InstallDir;$env:Path"
+    Write-Host "Added $InstallDir to user PATH"
+}
+Write-Host "1mcp.in installed in $InstallDir"
+Write-Host "Run 'mach1ctl start' to launch 1mcp.in"
+`))
+		} else {
+			w.Write([]byte(`#!/usr/bin/env bash
+set -euo pipefail
+OWNER="${MACH1_GITHUB_OWNER:-SaiAvinashPatoju}"
+REPO="${MACH1_GITHUB_REPO:-1mcp.in}"
+VERSION="${MACH1_VERSION:-latest}"
+INSTALL_DIR="${MACH1_INSTALL_DIR:-$HOME/.mach1/bin}"
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
+case "${OS}" in darwin) OS="darwin" ;; linux) OS="linux" ;; *) echo "Unsupported OS: ${OS}" >&2; exit 1 ;; esac
+case "${ARCH}" in x86_64|amd64) ARCH="amd64" ;; arm64|aarch64) ARCH="arm64" ;; *) echo "Unsupported architecture: ${ARCH}" >&2; exit 1 ;; esac
+if [ "${VERSION}" = "latest" ]; then API_URL="https://api.github.com/repos/${OWNER}/${REPO}/releases/latest"; else API_URL="https://api.github.com/repos/${OWNER}/${REPO}/releases/tags/${VERSION}"; fi
+command -v curl >/dev/null 2>&1 || { echo "curl is required" >&2; exit 1; }
+mkdir -p "${INSTALL_DIR}"
+ASSET="mach1-${OS}-${ARCH}.tar.gz"
+URL="$(curl -fsSL "${API_URL}" | sed -n "s/.*\"browser_download_url\": \"\([^\"]*${ASSET}\)\".*/\1/p" | head -1)"
+[ -n "${URL}" ] || { echo "Could not find release asset ${ASSET}" >&2; exit 1; }
+TMP_DIR="$(mktemp -d)"; trap 'rm -rf "${TMP_DIR}"' EXIT
+curl -fsSL "${URL}" -o "${TMP_DIR}/${ASSET}"
+tar -xzf "${TMP_DIR}/${ASSET}" -C "${INSTALL_DIR}"
+chmod +x "${INSTALL_DIR}/mach1" "${INSTALL_DIR}/mach1ctl" 2>/dev/null || true
+case ":${PATH}:" in *":${INSTALL_DIR}:"*) ;; *) SHELL_RC="${HOME}/.profile"; if [ -n "${SHELL:-}" ] && [ "$(basename "${SHELL}")" = "zsh" ]; then SHELL_RC="${HOME}/.zshrc"; fi; printf '\nexport PATH="%s:$PATH"\n' "${INSTALL_DIR}" >> "${SHELL_RC}"; echo "Added ${INSTALL_DIR} to PATH in ${SHELL_RC}"; esac
+echo "1mcp.in installed in ${INSTALL_DIR}"
+echo 'Run mach1ctl start to launch 1mcp.in'
+`))
+		}
+	}
 }
 
 func seedSkills(ctx context.Context, db *clouddb.DB) error {

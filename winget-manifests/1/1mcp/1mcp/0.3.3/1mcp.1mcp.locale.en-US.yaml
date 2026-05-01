@@ -1,0 +1,29 @@
+PackageIdentifier: 1mcp.1mcp
+PackageVersion: 0.3.3
+PackageLocale: en-US
+Publisher: 1mcp.in
+PublisherUrl: https://1mcp.in
+PublisherSupportUrl: https://github.com/SaiAvinashPatoju/1mcp.in/discussions
+Author: Sai Avinash Patoju
+PackageName: 1mcp.in
+PackageUrl: https://1mcp.in
+License: Apache-2.0
+LicenseUrl: https://github.com/SaiAvinashPatoju/1mcp.in/blob/main/LICENSE
+Copyright: Copyright (c) 2026 1mcp.in
+ShortDescription: The Unified MCP Router -- local-first MCP hub for teams and individuals. Route all AI tool calls through one secure process.
+Description: >-
+  1mcp.in replaces manual MCP management with a single router process (mach1) and desktop Hub UI.
+  One install. Every AI client (Codex, Cursor, VS Code, Claude Desktop) connects to one endpoint.
+  For teams: shared MCP config, encrypted credential vault, agent library, and usage dashboard.
+Tags:
+  - mcp
+  - model-context-protocol
+  - ai
+  - router
+  - local-first
+  - tools
+  - hub
+  - mach1
+Moniker: 1mcp
+ManifestType: locale
+ManifestVersion: 1.9.0

@@ -3,17 +3,24 @@
 	import { routerStatus, getRouterStatus } from '$lib/auth';
 
 	let intervalId: ReturnType<typeof setInterval> | null = null;
+	let installTab = 'bash';
 
 	onMount(async () => {
 		await getRouterStatus();
 		intervalId = setInterval(() => {
 			getRouterStatus().catch(() => {});
 		}, 5000);
+		if (navigator.userAgent.includes('Windows')) {
+			installTab = 'pwsh';
+		}
 	});
 
 	onDestroy(() => {
 		if (intervalId) clearInterval(intervalId);
 	});
+	function copyCmd(cmd: string) {
+		navigator.clipboard.writeText(cmd);
+	}
 
 	$: statusDot = $routerStatus?.status === 'running'
 		? 'bg-emerald-500'
@@ -26,6 +33,11 @@
 		: $routerStatus?.status === 'stopped'
 			? 'Stopped'
 			: 'Unknown';
+
+	$: installCmd = installTab === 'bash' ? "curl -fsSL https://install.1mcp.in | sh"
+		: installTab === 'pwsh' ? "irm https://install.1mcp.in/windows | iex"
+		: installTab === 'brew' ? "brew install SaiAvinashPatoju/tap/1mcp"
+		: "winget install 1mcp.1mcp";
 </script>
 
 <div class="hidden lg:flex w-1/2 flex-col justify-between p-12 relative z-10 bg-[#08080c]">
@@ -77,6 +89,21 @@
 					<p class="text-xs text-white/35 mt-0.5">Add and manage MCP servers and clients seamlessly.</p>
 				</div>
 			</div>
+		</div>
+	</div>
+
+	<!-- Install section -->
+	<div class="relative">
+		<p class="text-xs text-white/50 mb-2 font-medium">Quick Install</p>
+		<div class="flex gap-1 mb-2">
+			<button class="text-[11px] px-2.5 py-1 rounded {installTab === 'bash' ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50'}" on:click={() => installTab = 'bash'}>macOS/Linux</button>
+			<button class="text-[11px] px-2.5 py-1 rounded {installTab === 'pwsh' ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50'}" on:click={() => installTab = 'pwsh'}>Windows</button>
+			<button class="text-[11px] px-2.5 py-1 rounded {installTab === 'brew' ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50'}" on:click={() => installTab = 'brew'}>Homebrew</button>
+			<button class="text-[11px] px-2.5 py-1 rounded {installTab === 'winget' ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50'}" on:click={() => installTab = 'winget'}>Winget</button>
+		</div>
+		<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-black/40 border border-white/[0.06]">
+			<code class="text-[11px] text-white/60">{installCmd}</code>
+			<button class="text-[11px] text-orange-500/70 hover:text-orange-400 shrink-0 ml-2" on:click={() => copyCmd(installCmd)}>Copy</button>
 		</div>
 	</div>
 
