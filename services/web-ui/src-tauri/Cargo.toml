@@ -1,6 +1,6 @@
 [package]
 name = "mach1"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 description = "1mcp.in - Cross-platform MCP management hub"
 
