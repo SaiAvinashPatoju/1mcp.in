@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { writable, derived, get } from 'svelte/store';
-import type { InstalledMcp, MarketplaceMcp, ClientApp, Skill, RouterStatus, SystemUsage, ActivityItem, McpServerDetail, CommandResult, ServerDetail, ServerTool, ServerLogEntry, ServerConfig, MarketplaceItemDetail, ClientConnectionDetail, ClientRoutingHealth, ClientConfigPreview, AppPreferences, SystemInfo, DiagnosticsData } from './types';
+import type { InstalledMcp, MarketplaceMcp, ClientApp, Skill, RouterStatus, SystemUsage, ActivityItem, McpServerDetail, CommandResult, ServerDetail, ServerTool, ServerLogEntry, ServerConfig, MarketplaceItemDetail, ClientConnectionDetail, ClientRoutingHealth, ClientConfigPreview, AppPreferences, SystemInfo, DiagnosticsData, Runtime } from './types';
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
 const isTauri = browser && '__TAURI_INTERNALS__' in window;
@@ -15,6 +15,11 @@ type CloudMarketplaceItem = {
 	tags: string[];
 	homepage: string;
 	license: string;
+	author?: string;
+	publishedAt?: string;
+	downloads?: number;
+	rating?: number;
+	reviewCount?: number;
 	verification?: string;
 	sha256?: string;
 	signature?: string;
@@ -981,16 +986,16 @@ export function selectServer(id: string | null) {
 export const selectedMarketplaceItem = writable<string | null>(null);
 export const marketplaceItemDetail = writable<MarketplaceItemDetail | null>(null);
 
-function deriveSecurityChecks(verificationStatus: string): { label: string; status: string }[] {
+function deriveSecurityChecks(verificationStatus: string): { label: string; status: 'passed' | 'warning' | 'failed' }[] {
 	if (verificationStatus === 'anthropic-official' || verificationStatus === '1mcp.in-verified' || verificationStatus === '1mcp-verified') {
 		return [
-			{ label: 'Tool schema verified', status: 'passed' },
-			{ label: 'Digest matches registry', status: 'passed' },
+			{ label: 'Tool schema verified', status: 'passed' as const },
+			{ label: 'Digest matches registry', status: 'passed' as const },
 		];
 	}
 	return [
-		{ label: 'Tool schema verified', status: 'passed' },
-		{ label: 'Community contributed — verify before use', status: 'warning' },
+		{ label: 'Tool schema verified', status: 'passed' as const },
+		{ label: 'Community contributed — verify before use', status: 'warning' as const },
 	];
 }
 
@@ -1015,7 +1020,7 @@ export async function fetchMarketplaceItemDetail(id: string) {
 				shortDescription: apiItem.description,
 				version: apiItem.version,
 				runtime: apiItem.runtime as Runtime,
-				author: apiItem.author,
+				author: apiItem.author ?? 'community',
 				trust: apiItem.verification ?? 'community',
 				license: apiItem.license ?? 'MIT',
 				sha256: apiItem.sha256 ?? '',
@@ -1027,7 +1032,7 @@ export async function fetchMarketplaceItemDetail(id: string) {
 				tags: apiItem.tags ?? [],
 				installed: localItem?.installed ?? false,
 				capabilities: apiItem.tags ?? [],
-				security_checks: apiItem.security_checks ?? deriveSecurityChecks(apiItem.verification ?? 'community'),
+				security_checks: (apiItem.security_checks as { label: string; status: 'passed' | 'warning' | 'failed' }[] | undefined) ?? deriveSecurityChecks(apiItem.verification ?? 'community'),
 				requires_env: apiItem.requires_env ?? (localItem?.patProvider ? [`${localItem.patProvider.toUpperCase()}_TOKEN`] : [])
 			});
 			return;
@@ -1257,4 +1262,145 @@ export async function copyDiagnostics(): Promise<string> {
 	} catch {
 		return '{}';
 	}
+}
+
+// ── MCP Lifecycle Actions (v0.3.4) ──
+
+export async function installMCP(id: string) {
+	if (isTauri) {
+		return invokeDesktop('mach1_install_mcp', { id });
+	}
+	const res = await fetch(`${API_URL}/api/mcp/install`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ id })
+	});
+	if (!res.ok) throw new Error('Install failed');
+	return res.json();
+}
+
+export async function batchInstallMCPs(ids: string[]) {
+	if (isTauri) {
+		return invokeDesktop('mach1_install_batch', { ids });
+	}
+	const res = await fetch(`${API_URL}/api/mcp/install-batch`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ ids })
+	});
+	if (!res.ok) throw new Error('Batch install failed');
+	return res.json();
+}
+
+export async function startMCP(id: string) {
+	installed.update((list) =>
+		list.map((m) => (m.id === id ? { ...m, enabled: true } : m))
+	);
+	mcpServers.update((list) =>
+		list.map((m) =>
+			m.id === id
+				? { ...m, status: 'running' as const }
+				: m
+		)
+	);
+	if (isTauri) {
+		try {
+			return await invokeDesktop('mach1_start_mcp', { id });
+		} catch (e) {
+			installed.update((list) =>
+				list.map((m) => (m.id === id ? { ...m, enabled: false } : m))
+			);
+			mcpServers.update((list) =>
+				list.map((m) =>
+					m.id === id
+						? { ...m, status: 'error' as const }
+						: m
+				)
+			);
+			throw e;
+		}
+	}
+	const res = await fetch(`${API_URL}/api/mcp/${encodeURIComponent(id)}/start`, { method: 'POST' });
+	if (!res.ok) throw new Error('Start failed');
+	return res.json();
+}
+
+export async function stopMCP(id: string) {
+	installed.update((list) =>
+		list.map((m) => (m.id === id ? { ...m, enabled: false } : m))
+	);
+	mcpServers.update((list) =>
+		list.map((m) =>
+			m.id === id
+				? { ...m, status: 'sleeping' as const }
+				: m
+		)
+	);
+	if (isTauri) {
+		try {
+			return await invokeDesktop('mach1_close_mcp', { id });
+		} catch (e) {
+			installed.update((list) =>
+				list.map((m) => (m.id === id ? { ...m, enabled: true } : m))
+			);
+			mcpServers.update((list) =>
+				list.map((m) =>
+					m.id === id
+						? { ...m, status: 'running' as const }
+						: m
+				)
+			);
+			throw e;
+		}
+	}
+	const res = await fetch(`${API_URL}/api/mcp/${encodeURIComponent(id)}/stop`, { method: 'POST' });
+	if (!res.ok) throw new Error('Stop failed');
+	return res.json();
+}
+
+export async function setMcpEnv(id: string, vars: Record<string, string>) {
+	installed.update((list) =>
+		list.map((m) =>
+			m.id === id
+				? { ...m, env: { ...(m.env ?? {}), ...vars } }
+				: m
+		)
+	);
+	if (isTauri) {
+		return invokeDesktop('mach1_config_env', { id, vars });
+	}
+	const res = await fetch(`${API_URL}/api/mcp/${encodeURIComponent(id)}/env`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ vars })
+	});
+	if (!res.ok) throw new Error('Env config failed');
+	return res.json();
+}
+
+export async function checkEnabled() {
+	if (isTauri) {
+		return invokeDesktop('mach1_check_enabled', {});
+	}
+	const res = await fetch(`${API_URL}/api/mcp/enabled`);
+	if (!res.ok) throw new Error('Check enabled failed');
+	return res.json();
+}
+
+export async function healthCheck(id: string) {
+	if (isTauri) {
+		return invokeDesktop('mach1_health_check', { id });
+	}
+	const res = await fetch(`${API_URL}/api/mcp/${encodeURIComponent(id)}/health`);
+	if (!res.ok) throw new Error('Health check failed');
+	return res.json();
+}
+
+export async function autoDetectEnv(id: string): Promise<Record<string, string>> {
+	if (isTauri) {
+		return invokeDesktop('mach1_auto_detect_env', { id });
+	}
+	const res = await fetch(`${API_URL}/api/mcp/${encodeURIComponent(id)}/env/detect`);
+	if (!res.ok) throw new Error('Auto-detect failed');
+	return res.json();
 }

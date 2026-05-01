@@ -1,0 +1,106 @@
+{
+  "mcps": [
+    {
+      "id": "github",
+      "name": "GitHub",
+      "version": "0.6.2",
+      "description": "Search code, read issues/PRs, create issues and comments on GitHub via a personal access token.",
+      "tags": ["github", "vcs", "code", "official"],
+      "transport": "stdio",
+      "runtime": "node",
+      "entrypoint": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"]
+      },
+      "envSchema": [
+        {
+          "name": "GITHUB_PERSONAL_ACCESS_TOKEN",
+          "label": "GitHub Personal Access Token",
+          "description": "Fine-grained PAT with the scopes you want the agent to have.",
+          "secret": true,
+          "required": true,
+          "aliases": ["GITHUB_TOKEN", "GH_TOKEN"]
+        }
+      ],
+      "verification": "anthropic-official"
+    },
+    {
+      "id": "brave-search",
+      "name": "Brave Search",
+      "version": "0.1.0",
+      "description": "Web and local search using the Brave Search API.",
+      "tags": ["search", "web", "official"],
+      "transport": "stdio",
+      "runtime": "node",
+      "entrypoint": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-brave-search"]
+      },
+      "envSchema": [
+        {
+          "name": "BRAVE_API_KEY",
+          "label": "Brave Search API key",
+          "secret": true,
+          "required": true
+        }
+      ],
+      "verification": "anthropic-official"
+    },
+    {
+      "id": "memory",
+      "name": "Knowledge Graph Memory",
+      "version": "0.6.0",
+      "description": "Persistent knowledge graph the agent can query and update across turns.",
+      "tags": ["memory", "graph", "official"],
+      "transport": "stdio",
+      "runtime": "node",
+      "entrypoint": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-memory"]
+      },
+      "verification": "anthropic-official"
+    },
+    {
+      "id": "sequential-thinking",
+      "name": "Sequential Thinking",
+      "version": "0.6.2",
+      "description": "Enables step-by-step reasoning via tool calls. Dramatically improves complex problem solving for any LLM.",
+      "tags": ["reasoning", "thinking", "official"],
+      "transport": "stdio",
+      "runtime": "node",
+      "entrypoint": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+      },
+      "verification": "anthropic-official"
+    },
+    {
+      "id": "fetch",
+      "name": "Fetch",
+      "version": "0.6.0",
+      "description": "Fetch URLs and convert HTML to markdown for agent consumption.",
+      "tags": ["web", "http", "official"],
+      "transport": "stdio",
+      "runtime": "python",
+      "entrypoint": {
+        "command": "uvx",
+        "args": ["mcp-server-fetch"]
+      },
+      "verification": "anthropic-official"
+    },
+    {
+      "id": "retix",
+      "name": "Retix Vision",
+      "version": "1.0.0",
+      "description": "Local vision model for image analysis, OCR, and visual claim verification.",
+      "tags": ["vision", "ocr", "image", "local"],
+      "transport": "stdio",
+      "runtime": "python",
+      "entrypoint": {
+        "command": "python",
+        "args": ["C:\\projects\\work\\1Mcp\\retix-mcp.py"]
+      },
+      "verification": "community"
+    }
+  ]
+}

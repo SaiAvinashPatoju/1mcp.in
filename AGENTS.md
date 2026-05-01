@@ -753,11 +753,47 @@ If you are an AI agent working on this codebase:
 
 ### OpenCode Behavioral Rules
 
-11. **Subagent delegation for Go work.** When asked to add a new backend feature, ALWAYS delegate to the `@go-architect` subagent defined in `opencode.json`. It has direct access to Go tooling, Postgres MCP, and GitHub MCP.
+11. **Subagent delegation for Go work.** When asked to add a new backend feature, ALWAYS delegate to the `@go-architect` subagent defined in `opencode.json`.
 12. **Subagent delegation for UI work.** When asked to update the Local Hub UI or Team UI, ALWAYS delegate to the `@ui-builder` subagent. It handles SvelteKit, TypeScript, and Tauri (Rust) tasks.
 13. **Plan before Build.** Before executing any bash command to change architecture, map out the change to ensure it doesn't violate process isolation (Docker/seccomp) or OpenTelemetry requirements.
 14. **Subagent scope is read-only.** When invoking `@go-architect` or `@ui-builder`, their file writes are limited to their domain. Cross-boundary changes (e.g., a UI subagent modifying Go router code) must be reviewed before write.
 
-### Available Tools
+### CRITICAL: ALWAYS Route Through mach1
 
-15. **retix (local vision model).** A local vision MCP server is available via `retix` in `opencode.json`. Use `describe_image` to analyze screenshots, `ocr_image` to extract text from images, and `check_image` to verify visual claims. On macOS with Apple Silicon, this runs MLX-VLM locally. On other platforms, it returns guidance to the user. Use this whenever the user shares an image or asks about visual content.
+15. **mach1 is the single entry point for ALL external API calls.** The agent runtime connects to mach1 via `opencode.json`. All tools are namespaced as `<mcp_id>__<tool_name>` (e.g. `github__search_repositories`, `brave-search__web_search`).
+
+16. **MUST route through mach1 for these operations:**
+    - GitHub operations → `github__<tool>` via mach1
+    - Web search → `brave-search__web_search` via mach1
+    - URL fetch → `fetch__fetch` via mach1
+    - Knowledge graph → `memory__<tool>` via mach1
+    - Sequential thinking → `sequential-thinking__think` via mach1
+    - Vision/image analysis → `retix__<tool>` via mach1
+    - MCP management (install, config, health) → `mach1_<tool>` via mach1
+    - Any other external API → discover and use through mach1
+
+17. **MUST NOT use direct CLI tools that bypass mach1:**
+    - NEVER use `gh` CLI for GitHub operations
+    - NEVER use `curl` for web fetches
+    - NEVER use `npx` or `uvx` directly
+    - NEVER use git CLI for GitHub API operations (git clone, git pull, etc.)
+    - NEVER use any tool that duplicates functionality available through mach1
+
+18. **Bash usage is OK ONLY for these local operations:**
+    - Git for repo operations (commit, push, status, diff, log)
+    - Build commands (go build, go test, npm install, npm run build)
+    - File system operations not handled by OpenCode's built-in tools
+    - Starting/restarting the mach1 process itself
+
+19. **If mach1 is not running, start it first:**
+    ```
+    cd C:\projects\work\1Mcp
+    .\bin\mach1.exe -config mach1-dev-config.json -catalog packages/registry-index/index.json
+    ```
+    Then use `tools/list` to discover available tools before making any call.
+
+20. **To discover the right tool:** Use `mach1_semantic_search` or `mach1_route` to find and execute the best matching tool. These work through the standard `tools/call` mechanism.
+
+### Available Tools (for local vision)
+
+21. **retix (local vision model).** Available through mach1 as `retix__<tool>`. Use `describe_image` to analyze screenshots, `ocr_image` to extract text from images, and `check_image` to verify visual claims. On macOS with Apple Silicon, this runs MLX-VLM locally. On other platforms, it returns guidance to the user. Use this whenever the user shares an image or asks about visual content.

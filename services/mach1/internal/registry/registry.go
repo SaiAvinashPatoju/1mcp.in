@@ -225,8 +225,12 @@ func (d *DB) ListAll(ctx context.Context) ([]Entry, error) {
 			return nil, err
 		}
 		e.Enabled = enabled == 1
-		_ = json.Unmarshal([]byte(argsJSON), &e.Args)
-		_ = json.Unmarshal([]byte(envJSON), &e.Env)
+		if err := json.Unmarshal([]byte(argsJSON), &e.Args); err != nil {
+			return nil, fmt.Errorf("decode args for %s: %w", e.ID, err)
+		}
+		if err := json.Unmarshal([]byte(envJSON), &e.Env); err != nil {
+			return nil, fmt.Errorf("decode env for %s: %w", e.ID, err)
+		}
 		out = append(out, e)
 	}
 	return out, rows.Err()

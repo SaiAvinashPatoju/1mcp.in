@@ -166,7 +166,7 @@
 			<div class="flex items-start justify-between">
 				<div>
 					<h1 class="text-xl font-bold text-white/95">Clients</h1>
-					<p class="text-sm text-white/30 mt-1">Connect 1mcp.in to your favorite AI tools. {connectedCount} of {$clients.length} connected.</p>
+					<p class="text-sm text-white/30 mt-1">Connect mach1 to replace all your MCP configs. {connectedCount} of {$clients.length} connected.</p>
 				</div>
 				<div class="flex items-center gap-3">
 					<button on:click={() => { refreshClientConnections(); fetchRouterStatus(); }} class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-xs text-white/60 hover:text-white/90 hover:bg-white/[0.06] transition-colors">
@@ -307,6 +307,7 @@
 												on:click|stopPropagation={() => handleDisconnect(client.id)}
 												disabled={actionLoading}
 												class="px-3 py-1.5 rounded-md bg-white/[0.03] border border-white/[0.06] text-[11px] text-white/50 hover:text-white/80 hover:bg-white/[0.06] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+												title="Restores your original MCP config"
 											>
 												Disconnect
 											</button>
@@ -315,11 +316,11 @@
 												on:click|stopPropagation={() => handleSetup(client.id)}
 												disabled={actionLoading}
 												class="px-3 py-1.5 rounded-md bg-orange-500 text-[11px] text-white font-medium hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+												title="Replaces all MCPs with mach1 (backs up existing)"
 											>
-												Setup
+												Connect via mach1
 											</button>
 										{/if}
-									
 									</div>
 								</td>
 							</tr>
@@ -426,7 +427,15 @@
 				<!-- Setup & Config -->
 				<div class="rounded-lg bg-white/[0.02] border border-white/[0.06] p-4 space-y-3">
 					<h4 class="text-xs font-medium text-white/70">Setup & Config</h4>
-					<p class="text-[11px] text-white/40">Your client is configured and routing through mach1.</p>
+					<div class="rounded-md bg-orange-500/5 border border-orange-500/10 p-3 space-y-1.5">
+						<div class="flex items-center gap-1.5 text-[11px] text-orange-400/80">
+							<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+							<span class="font-medium">mach1 is in control</span>
+						</div>
+						<p class="text-[10px] text-white/30 leading-relaxed">
+							All MCPs have been replaced with mach1. Your original MCP config was backed up and will be restored when you disconnect.
+						</p>
+					</div>
 					<button on:click={() => toast.info('Config editing available in desktop app')} class="w-full flex items-center justify-between py-2 px-3 rounded-md bg-white/[0.03] border border-white/[0.06] text-xs text-white/60 hover:text-white/90 hover:bg-white/[0.06] transition-colors">
 						<span>Open Config File</span>
 						<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>

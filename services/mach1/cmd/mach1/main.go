@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,7 +21,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/catalog"
+	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/install"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/manifest"
+	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/metatools"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/observability"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/paths"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/registry"
@@ -45,6 +49,7 @@ func main() {
 		listenAddr  = flag.String("listen", "127.0.0.1:3000", "HTTP transport listen address")
 		metricsAddr = flag.String("metrics-addr", "127.0.0.1:3031", "Prometheus metrics listen address; empty disables standalone metrics server")
 		httpToken   = flag.String("http-token", os.Getenv("MACH1_HTTP_TOKEN"), "bearer token required for HTTP transport; defaults to MACH1_HTTP_TOKEN")
+		catalogPath = flag.String("catalog", os.Getenv("MACH1_CATALOG"), "path to marketplace catalog JSON")
 	)
 	flag.Parse()
 
@@ -63,7 +68,7 @@ func main() {
 	}()
 
 	metrics := observability.NewMetrics()
-	sup, err := buildSupervisor(ctx, *configPath, *dbPath, logger, metrics)
+	sup, db, sec, getManifest, err := buildSupervisor(ctx, *configPath, *dbPath, logger, metrics)
 	if err != nil {
 		logger.Error("build supervisor", "err", err)
 		os.Exit(1)
@@ -76,11 +81,32 @@ func main() {
 	sup.Start(warmupCtx)
 	warmupCancel()
 
+	// Load marketplace catalog.
+	var catalogEntries []manifest.Manifest
+	if *catalogPath != "" {
+		if c, err := catalog.Load(*catalogPath); err == nil {
+			catalogEntries = c
+		} else {
+			logger.Warn("catalog load failed", "path", *catalogPath, "err", err)
+		}
+	}
+	if len(catalogEntries) == 0 {
+		for _, p := range []string{"packages/registry-index/index.json", "../../packages/registry-index/index.json"} {
+			if c, err := catalog.Load(p); err == nil {
+				catalogEntries = c
+				break
+			}
+		}
+	}
+
+	installer := &install.Installer{DB: db, Logger: logger}
+	meta := metatools.New(sup, db, sec, installer, catalogEntries, getManifest, logger)
+
 	if *metricsAddr != "" && *transport != "http" {
 		go serveStandaloneMetrics(ctx, *metricsAddr, metrics, logger)
 	}
 
-	srv := router.New(os.Stdin, os.Stdout, sup, logger)
+	srv := router.New(os.Stdin, os.Stdout, sup, meta, logger)
 	var runErr error
 	switch *transport {
 	case "stdio":
@@ -97,7 +123,7 @@ func main() {
 	}
 }
 
-func buildSupervisor(ctx context.Context, configPath, dbFlag string, logger *slog.Logger, metrics *observability.Metrics) (*supervisor.Supervisor, error) {
+func buildSupervisor(ctx context.Context, configPath, dbFlag string, logger *slog.Logger, metrics *observability.Metrics) (*supervisor.Supervisor, *registry.DB, *secrets.Store, func(id string) (*manifest.Manifest, error), error) {
 	if configPath != "" {
 		return buildFromConfig(configPath, logger, metrics)
 	}
@@ -105,28 +131,28 @@ func buildSupervisor(ctx context.Context, configPath, dbFlag string, logger *slo
 	if dbPath == "" {
 		p, err := paths.RegistryDB()
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, nil, err
 		}
 		dbPath = p
 	}
 	return buildFromDB(ctx, dbPath, logger, metrics)
 }
 
-func buildFromConfig(path string, logger *slog.Logger, metrics *observability.Metrics) (*supervisor.Supervisor, error) {
+func buildFromConfig(path string, logger *slog.Logger, metrics *observability.Metrics) (*supervisor.Supervisor, *registry.DB, *secrets.Store, func(id string) (*manifest.Manifest, error), error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("read config: %w", err)
 	}
 	var cfg fileConfig
 	if err := json.Unmarshal(b, &cfg); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("parse config: %w", err)
 	}
 	manifests := map[string]*manifest.Manifest{}
 	entries := make([]registry.Entry, 0, len(cfg.MCPs))
 	for i := range cfg.MCPs {
 		m := &cfg.MCPs[i]
 		if err := m.Validate(); err != nil {
-			return nil, fmt.Errorf("config[%s]: %w", m.ID, err)
+			return nil, nil, nil, nil, fmt.Errorf("config[%s]: %w", m.ID, err)
 		}
 		manifests[m.ID] = m
 		entries = append(entries, registry.Entry{
@@ -140,39 +166,41 @@ func buildFromConfig(path string, logger *slog.Logger, metrics *observability.Me
 			Cwd:     m.Entrypoint.Cwd,
 		})
 	}
-	return supervisor.New(entries, func(id string) (*manifest.Manifest, error) {
+	getManifest := func(id string) (*manifest.Manifest, error) {
 		if m, ok := manifests[id]; ok {
 			return m, nil
 		}
 		return nil, fmt.Errorf("manifest for %s not found", id)
-	}, nil, supervisor.Options{Logger: logger, Metrics: metrics})
+	}
+	sup, err := supervisor.New(entries, getManifest, nil, supervisor.Options{Logger: logger, Metrics: metrics})
+	return sup, nil, nil, getManifest, err
 }
 
-func buildFromDB(ctx context.Context, dbPath string, logger *slog.Logger, metrics *observability.Metrics) (*supervisor.Supervisor, error) {
+func buildFromDB(ctx context.Context, dbPath string, logger *slog.Logger, metrics *observability.Metrics) (*supervisor.Supervisor, *registry.DB, *secrets.Store, func(id string) (*manifest.Manifest, error), error) {
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		return nil, fmt.Errorf("mkdir registry dir: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("mkdir registry dir: %w", err)
 	}
 	db, err := registry.Open(dbPath)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 	// DB stays open for the process lifetime; supervisor copies what it needs
 	// at construction so we don't hold the handle in the hot path.
 	entries, err := db.ListEnabled(ctx)
 	if err != nil {
 		_ = db.Close()
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	secPath, err := paths.SecretsFile()
 	if err != nil {
 		_ = db.Close()
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 	sec, err := secrets.Open(secPath)
 	if err != nil {
 		_ = db.Close()
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	getManifest := func(id string) (*manifest.Manifest, error) {
@@ -182,21 +210,33 @@ func buildFromDB(ctx context.Context, dbPath string, logger *slog.Logger, metric
 		}
 		return manifest.Parse(manifestJSON)
 	}
-	return supervisor.New(entries, getManifest, sec, supervisor.Options{Logger: logger, Registry: db, Metrics: metrics})
+	sup, err := supervisor.New(entries, getManifest, sec, supervisor.Options{Logger: logger, Registry: db, Metrics: metrics})
+	return sup, db, sec, getManifest, err
 }
 
 func serveStandaloneMetrics(ctx context.Context, addr string, metrics *observability.Metrics, logger *slog.Logger) {
 	mux := http.NewServeMux()
 	mux.Handle("GET /metrics", metrics.Handler())
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	// Try the requested address first; if it's in use, fall back to a
+	// kernel-assigned port so we don't block startup.
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		logger.Warn("metrics address in use; falling back to random port", "requested", addr, "error", err)
+		listener, err = net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			logger.Warn("metrics endpoint stopped", "err", err)
+			return
+		}
+	}
+	logger.Info("metrics endpoint ready", "addr", listener.Addr().String(), "path", "/metrics")
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
 	}()
-	logger.Info("metrics endpoint ready", "addr", addr, "path", "/metrics")
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Warn("metrics endpoint stopped", "err", err)
 	}
 }

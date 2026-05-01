@@ -1,9 +1,10 @@
 // Package clients writes (and removes) the 1mcp.in entry in the config files
 // of supported MCP clients: VS Code, Cursor, Claude Desktop.
 //
-// We intentionally read-modify-write the existing JSON (or TOML for Codex)
-// instead of regenerating it from scratch so we never clobber the user's other
-// servers.
+// ConnectTakeover REPLACES the entire client MCP config with a single mach1
+// entry. Existing entries are backed up to a sidecar file so DisconnectRestore
+// can bring them back. This ensures the AI client has no choice but to route
+// every tool call through mach1.
 package clients
 
 import (
@@ -21,13 +22,13 @@ import (
 type Kind string
 
 const (
-	VSCode     Kind = "vscode"
-	Cursor     Kind = "cursor"
-	Claude     Kind = "claude"
-	ClaudeCode Kind = "claudecode"
-	Windsurf   Kind = "windsurf"
-	Codex      Kind = "codex"
-	OpenCode   Kind = "opencode"
+	VSCode      Kind = "vscode"
+	Cursor      Kind = "cursor"
+	Claude      Kind = "claude"
+	ClaudeCode  Kind = "claudecode"
+	Windsurf    Kind = "windsurf"
+	Codex       Kind = "codex"
+	OpenCode    Kind = "opencode"
 	Antigravity Kind = "antigravity"
 )
 
@@ -46,6 +47,474 @@ type ServerEntry struct {
 	Env     map[string]string `json:"env,omitempty"`
 	Type    string            `json:"type,omitempty"`
 }
+
+// HTTPEntry is the per-server JSON shape for HTTP transport clients.
+type HTTPEntry struct {
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Type    string            `json:"type,omitempty"`
+}
+
+// BackupResult describes what happened during a takeover backup.
+type BackupResult struct {
+	BackedUpCount int
+	BackupPath    string
+}
+
+// ---------------------------------------------------------------------------
+// Takeover (connect) – replace everything with mach1
+// ---------------------------------------------------------------------------
+
+// ConnectTakeover reads the client's existing MCP config, backs up every
+// non-mach1 entry to a sidecar file, then writes a config that contains ONLY
+// the mach1 entry. Returns the config path and backup metadata.
+func ConnectTakeover(kind Kind, entry ServerEntry) (path string, backup BackupResult, err error) {
+	path, key, err := configPath(kind)
+	if err != nil {
+		return "", backup, err
+	}
+	root, err := readJSONObject(path)
+	if err != nil {
+		return "", backup, err
+	}
+	servers, _ := root[key].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+
+	// 1. Build backup of everything except mach1
+	backupEntries := map[string]any{}
+	for name, val := range servers {
+		if name == EntryName {
+			continue
+		}
+		backupEntries[name] = val
+	}
+	backup.BackedUpCount = len(backupEntries)
+	backup.BackupPath = backupPath(path)
+
+	if backup.BackedUpCount > 0 {
+		if err := writeJSONObject(backup.BackupPath, backupEntries); err != nil {
+			return "", backup, fmt.Errorf("write backup: %w", err)
+		}
+	} else {
+		// No prior entries – ensure no stale backup file exists
+		_ = os.Remove(backup.BackupPath)
+	}
+
+	// 2. Replace the entire servers section with ONLY mach1
+	b, _ := json.Marshal(entry)
+	var asAny any
+	_ = json.Unmarshal(b, &asAny)
+	root[key] = map[string]any{EntryName: asAny}
+
+	if err := writeJSONObject(path, root); err != nil {
+		return "", backup, err
+	}
+	return path, backup, nil
+}
+
+// ConnectTakeoverOpenCode is the OpenCode-specific variant of ConnectTakeover.
+func ConnectTakeoverOpenCode(entry ServerEntry) (path string, backup BackupResult, err error) {
+	path, key, err := configPath(OpenCode)
+	if err != nil {
+		return "", backup, err
+	}
+	root, err := readJSONObject(path)
+	if err != nil {
+		return "", backup, err
+	}
+	servers, _ := root[key].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+
+	backupEntries := map[string]any{}
+	for name, val := range servers {
+		if name == EntryName {
+			continue
+		}
+		backupEntries[name] = val
+	}
+	backup.BackedUpCount = len(backupEntries)
+	backup.BackupPath = backupPath(path)
+
+	if backup.BackedUpCount > 0 {
+		if err := writeJSONObject(backup.BackupPath, backupEntries); err != nil {
+			return "", backup, fmt.Errorf("write backup: %w", err)
+		}
+	} else {
+		_ = os.Remove(backup.BackupPath)
+	}
+
+	var entryAny any
+	if entry.Type == "http" || entry.Type == "remote" {
+		entryAny = map[string]any{
+			"type":    "remote",
+			"url":     entry.Command,
+			"enabled": true,
+		}
+	} else {
+		cmd := append([]string{entry.Command}, entry.Args...)
+		entryAny = map[string]any{
+			"type":    "local",
+			"command": cmd,
+			"enabled": true,
+		}
+	}
+	root[key] = map[string]any{EntryName: entryAny}
+
+	if err := writeJSONObject(path, root); err != nil {
+		return "", backup, err
+	}
+	return path, backup, nil
+}
+
+// ConnectTakeoverCodex is the Codex-specific (TOML) variant.
+func ConnectTakeoverCodex(entry ServerEntry) (path string, backup BackupResult, err error) {
+	path, _, err = configPath(Codex)
+	if err != nil {
+		return "", backup, err
+	}
+
+	var doc map[string]any
+	if b, err := os.ReadFile(path); err == nil {
+		if err := toml.Unmarshal(b, &doc); err != nil {
+			return "", backup, fmt.Errorf("parse %s: %w", path, err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", backup, fmt.Errorf("read %s: %w", path, err)
+	}
+	if doc == nil {
+		doc = map[string]any{}
+	}
+
+	servers, _ := doc["mcp_servers"].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+
+	backupEntries := map[string]any{}
+	for name, val := range servers {
+		if name == EntryName {
+			continue
+		}
+		backupEntries[name] = val
+	}
+	backup.BackedUpCount = len(backupEntries)
+	backup.BackupPath = backupPath(path)
+
+	if backup.BackedUpCount > 0 {
+		if err := writeTOMLBackup(backup.BackupPath, backupEntries); err != nil {
+			return "", backup, fmt.Errorf("write backup: %w", err)
+		}
+	} else {
+		_ = os.Remove(backup.BackupPath)
+	}
+
+	doc["mcp_servers"] = map[string]any{
+		EntryName: map[string]any{
+			"command": entry.Command,
+			"args":    entry.Args,
+		},
+	}
+
+	b, err := toml.Marshal(doc)
+	if err != nil {
+		return "", backup, fmt.Errorf("serialize %s: %w", path, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", backup, err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return "", backup, err
+	}
+	return path, backup, os.Rename(tmp, path)
+}
+
+// ConnectTakeoverHTTP is the HTTP variant for JSON-based clients.
+func ConnectTakeoverHTTP(kind Kind, entry HTTPEntry) (path string, backup BackupResult, err error) {
+	path, key, err := configPath(kind)
+	if err != nil {
+		return "", backup, err
+	}
+	root, err := readJSONObject(path)
+	if err != nil {
+		return "", backup, err
+	}
+	servers, _ := root[key].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+
+	backupEntries := map[string]any{}
+	for name, val := range servers {
+		if name == EntryName {
+			continue
+		}
+		backupEntries[name] = val
+	}
+	backup.BackedUpCount = len(backupEntries)
+	backup.BackupPath = backupPath(path)
+
+	if backup.BackedUpCount > 0 {
+		if err := writeJSONObject(backup.BackupPath, backupEntries); err != nil {
+			return "", backup, fmt.Errorf("write backup: %w", err)
+		}
+	} else {
+		_ = os.Remove(backup.BackupPath)
+	}
+
+	obj := map[string]any{
+		"type": "http",
+		"url":  entry.URL,
+	}
+	if len(entry.Headers) > 0 {
+		obj["headers"] = entry.Headers
+	}
+	root[key] = map[string]any{EntryName: obj}
+
+	if err := writeJSONObject(path, root); err != nil {
+		return "", backup, err
+	}
+	return path, backup, nil
+}
+
+// ConnectTakeoverHTTPCodex is the HTTP variant for Codex (TOML).
+func ConnectTakeoverHTTPCodex(url string) (path string, backup BackupResult, err error) {
+	path, _, err = configPath(Codex)
+	if err != nil {
+		return "", backup, err
+	}
+
+	var doc map[string]any
+	if b, err := os.ReadFile(path); err == nil {
+		if err := toml.Unmarshal(b, &doc); err != nil {
+			return "", backup, fmt.Errorf("parse %s: %w", path, err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", backup, fmt.Errorf("read %s: %w", path, err)
+	}
+	if doc == nil {
+		doc = map[string]any{}
+	}
+
+	servers, _ := doc["mcp_servers"].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+
+	backupEntries := map[string]any{}
+	for name, val := range servers {
+		if name == EntryName {
+			continue
+		}
+		backupEntries[name] = val
+	}
+	backup.BackedUpCount = len(backupEntries)
+	backup.BackupPath = backupPath(path)
+
+	if backup.BackedUpCount > 0 {
+		if err := writeTOMLBackup(backup.BackupPath, backupEntries); err != nil {
+			return "", backup, fmt.Errorf("write backup: %w", err)
+		}
+	} else {
+		_ = os.Remove(backup.BackupPath)
+	}
+
+	doc["mcp_servers"] = map[string]any{
+		EntryName: map[string]any{
+			"url":  url,
+			"type": "http",
+		},
+	}
+
+	b, err := toml.Marshal(doc)
+	if err != nil {
+		return "", backup, fmt.Errorf("serialize %s: %w", path, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", backup, err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return "", backup, err
+	}
+	return path, backup, os.Rename(tmp, path)
+}
+
+// ---------------------------------------------------------------------------
+// Disconnect (restore) – bring back the backed-up entries
+// ---------------------------------------------------------------------------
+
+// DisconnectRestore removes the mach1 entry and restores every MCP that was
+// backed up during ConnectTakeover. If no backup exists it simply removes
+// mach1 and leaves everything else untouched.
+func DisconnectRestore(kind Kind) (path string, restored int, err error) {
+	path, key, err := configPath(kind)
+	if err != nil {
+		return "", 0, err
+	}
+	if _, statErr := os.Stat(path); errors.Is(statErr, os.ErrNotExist) {
+		return path, 0, nil
+	}
+
+	root, err := readJSONObject(path)
+	if err != nil {
+		return path, 0, err
+	}
+	servers, _ := root[key].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+
+	bp := backupPath(path)
+	if _, statErr := os.Stat(bp); statErr == nil {
+		// Restore backed-up entries
+		backupEntries, err := readJSONObject(bp)
+		if err != nil {
+			return path, 0, fmt.Errorf("read backup: %w", err)
+		}
+		for name, val := range backupEntries {
+			servers[name] = val
+		}
+		restored = len(backupEntries)
+		_ = os.Remove(bp)
+	}
+
+	delete(servers, EntryName)
+	root[key] = servers
+	if err := writeJSONObject(path, root); err != nil {
+		return path, restored, err
+	}
+	return path, restored, nil
+}
+
+// DisconnectRestoreOpenCode is the OpenCode-specific variant.
+func DisconnectRestoreOpenCode() (path string, restored int, err error) {
+	path, key, err := configPath(OpenCode)
+	if err != nil {
+		return "", 0, err
+	}
+	if _, statErr := os.Stat(path); errors.Is(statErr, os.ErrNotExist) {
+		return path, 0, nil
+	}
+
+	root, err := readJSONObject(path)
+	if err != nil {
+		return path, 0, err
+	}
+	servers, _ := root[key].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+
+	bp := backupPath(path)
+	if _, statErr := os.Stat(bp); statErr == nil {
+		backupEntries, err := readJSONObject(bp)
+		if err != nil {
+			return path, 0, fmt.Errorf("read backup: %w", err)
+		}
+		for name, val := range backupEntries {
+			servers[name] = val
+		}
+		restored = len(backupEntries)
+		_ = os.Remove(bp)
+	}
+
+	delete(servers, EntryName)
+	root[key] = servers
+	if err := writeJSONObject(path, root); err != nil {
+		return path, restored, err
+	}
+	return path, restored, nil
+}
+
+// DisconnectRestoreCodex is the Codex-specific (TOML) variant.
+func DisconnectRestoreCodex() (path string, restored int, err error) {
+	path, _, err = configPath(Codex)
+	if err != nil {
+		return "", 0, err
+	}
+	if _, statErr := os.Stat(path); errors.Is(statErr, os.ErrNotExist) {
+		return path, 0, nil
+	}
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return path, 0, err
+	}
+	var doc map[string]any
+	if err := toml.Unmarshal(b, &doc); err != nil {
+		return path, 0, fmt.Errorf("parse %s: %w", path, err)
+	}
+
+	servers, _ := doc["mcp_servers"].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+
+	bp := backupPath(path)
+	if _, statErr := os.Stat(bp); statErr == nil {
+		backupEntries, err := readTOMLBackup(bp)
+		if err != nil {
+			return path, 0, fmt.Errorf("read backup: %w", err)
+		}
+		for name, val := range backupEntries {
+			servers[name] = val
+		}
+		restored = len(backupEntries)
+		_ = os.Remove(bp)
+	}
+
+	delete(servers, EntryName)
+	doc["mcp_servers"] = servers
+
+	out, err := toml.Marshal(doc)
+	if err != nil {
+		return path, restored, err
+	}
+	if err := os.WriteFile(path, out, 0o644); err != nil {
+		return path, restored, err
+	}
+	return path, restored, nil
+}
+
+// ---------------------------------------------------------------------------
+// Backup helpers
+// ---------------------------------------------------------------------------
+
+func backupPath(configPath string) string {
+	return configPath + ".mach1-backup"
+}
+
+func writeTOMLBackup(path string, entries map[string]any) error {
+	b, err := toml.Marshal(entries)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o600)
+}
+
+func readTOMLBackup(path string) (map[string]any, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	if err := toml.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	if m == nil {
+		m = map[string]any{}
+	}
+	return m, nil
+}
+
+// ---------------------------------------------------------------------------
+// Legacy additive helpers (kept for compatibility, but NOT used by connect)
+// ---------------------------------------------------------------------------
 
 // Connect writes (or replaces) the 1mcp.in entry in client kind's config file.
 // It creates the file and parent dirs if absent. The kind's existing entries
@@ -104,7 +573,9 @@ func Disconnect(kind Kind) (path string, removed bool, err error) {
 }
 
 // ConnectOpenCode writes the 1mcp.in entry in OpenCode's config format.
-// OpenCode uses a "mcp" key with a different entry shape (array-style command).
+// OpenCode uses a "mcp" key with a different entry shape.
+// When entry.Type is "http" or "remote", we use remote format with URL;
+// otherwise we use local format with command array.
 func ConnectOpenCode(entry ServerEntry) (path string, err error) {
 	path, key, err := configPath(OpenCode)
 	if err != nil {
@@ -114,16 +585,54 @@ func ConnectOpenCode(entry ServerEntry) (path string, err error) {
 	if err != nil {
 		return "", err
 	}
-	cmd := append([]string{entry.Command}, entry.Args...)
 	servers, _ := root[key].(map[string]any)
 	if servers == nil {
 		servers = map[string]any{}
 	}
-	servers[EntryName] = map[string]any{
-		"type":    "local",
-		"command": cmd,
-		"enabled": true,
+	if entry.Type == "http" || entry.Type == "remote" {
+		servers[EntryName] = map[string]any{
+			"type":    "remote",
+			"url":     entry.Command,
+			"enabled": true,
+		}
+	} else {
+		cmd := append([]string{entry.Command}, entry.Args...)
+		servers[EntryName] = map[string]any{
+			"type":    "local",
+			"command": cmd,
+			"enabled": true,
+		}
 	}
+	root[key] = servers
+	if err := writeJSONObject(path, root); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// ConnectHTTP writes (or replaces) the 1mcp.in HTTP entry in client kind's
+// config file. It uses the URL-based format suitable for HTTP/streamable transport.
+func ConnectHTTP(kind Kind, entry HTTPEntry) (path string, err error) {
+	path, key, err := configPath(kind)
+	if err != nil {
+		return "", err
+	}
+	root, err := readJSONObject(path)
+	if err != nil {
+		return "", err
+	}
+	servers, _ := root[key].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+	obj := map[string]any{
+		"type": "http",
+		"url":  entry.URL,
+	}
+	if len(entry.Headers) > 0 {
+		obj["headers"] = entry.Headers
+	}
+	servers[EntryName] = obj
 	root[key] = servers
 	if err := writeJSONObject(path, root); err != nil {
 		return "", err
@@ -158,6 +667,49 @@ func ConnectCodex(entry ServerEntry) (path string, err error) {
 	servers[EntryName] = map[string]any{
 		"command": entry.Command,
 		"args":    entry.Args,
+	}
+	doc["mcp_servers"] = servers
+
+	b, err := toml.Marshal(doc)
+	if err != nil {
+		return "", fmt.Errorf("serialize %s: %w", path, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return "", err
+	}
+	return path, os.Rename(tmp, path)
+}
+
+// ConnectHTTPCodex writes the 1mcp.in HTTP entry in Codex's TOML config format.
+func ConnectHTTPCodex(url string) (path string, err error) {
+	path, _, err = configPath(Codex)
+	if err != nil {
+		return "", err
+	}
+
+	var doc map[string]any
+	if b, err := os.ReadFile(path); err == nil {
+		if err := toml.Unmarshal(b, &doc); err != nil {
+			return "", fmt.Errorf("parse %s: %w", path, err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("read %s: %w", path, err)
+	}
+	if doc == nil {
+		doc = map[string]any{}
+	}
+
+	servers, _ := doc["mcp_servers"].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+	servers[EntryName] = map[string]any{
+		"url":  url,
+		"type": "http",
 	}
 	doc["mcp_servers"] = servers
 

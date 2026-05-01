@@ -259,3 +259,20 @@ export interface DiagnosticsData {
 	installed_mcps: number;
 	connected_clients: number;
 }
+
+export type McpHealthStatus = 'healthy' | 'missing_env' | 'error' | 'disabled' | 'not_installed';
+
+export interface McpHealthResult {
+	status: 'healthy' | 'unhealthy' | 'unknown';
+	process_status: string;
+	auth_status: string;
+	last_check: string;
+	error?: string;
+}
+
+export interface McpEnvVarDef {
+	key: string;
+	value: string;
+	secret: boolean;
+	description?: string;
+}

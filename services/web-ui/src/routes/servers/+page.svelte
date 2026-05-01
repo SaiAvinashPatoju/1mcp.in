@@ -2,8 +2,10 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { toast } from '$lib/toast';
+	import McpConfigModal from '$lib/components/McpConfigModal.svelte';
 	import {
 		installed,
+		marketplace,
 		mcpServers,
 		selectedServerId,
 		serverDetail,
@@ -12,13 +14,21 @@
 		serverConfig,
 		fetchInstalled,
 		fetchMcpServers,
+		fetchMarketplace,
 		selectServer,
 		scanServer,
 		restartSingleServer,
 		uninstallSingleServer,
-		toggleMcp,
-		startDashboardSync
+		startDashboardSync,
+		startMCP,
+		stopMCP,
+		installMCP,
+		setMcpEnv,
+		healthCheck,
+		autoDetectEnv,
+		fetchServerConfig
 	} from '$lib/stores';
+	import type { McpHealthResult, ServerConfig } from '$lib/types';
 
 	type Tab = 'installed' | 'running' | 'updates' | 'disabled';
 	type SortOption = 'name' | 'status' | 'lastUsed';
@@ -35,10 +45,20 @@
 	let serverLoading = false;
 	let stopSync: (() => void) | null = null;
 
+	// v0.3.4 — Config modal state
+	let showConfigModal = false;
+	let configMcpId: string | null = null;
+	let configMcpName = '';
+	let configMcpDescription = '';
+	let configMcpConfig: ServerConfig | null = null;
+	let configMcpHealth: McpHealthResult | null = null;
+	let configLoading = false;
+
 	onMount(() => {
 		(async () => {
 			await fetchInstalled();
 			await fetchMcpServers();
+			await fetchMarketplace();
 			stopSync = startDashboardSync();
 		})();
 		return () => { if (stopSync) stopSync(); };
@@ -73,24 +93,6 @@
 		}
 	}
 
-	function statusClass(status: string): string {
-		switch (status) {
-			case 'running': return 'text-emerald-400';
-			case 'sleeping': return 'text-white/40';
-			case 'error': return 'text-red-400';
-			default: return 'text-white/40';
-		}
-	}
-
-	function statusDot(status: string): string {
-		switch (status) {
-			case 'running': return 'bg-emerald-500';
-			case 'sleeping': return 'bg-white/30';
-			case 'error': return 'bg-red-500';
-			default: return 'bg-white/20';
-		}
-	}
-
 	function trustClass(trust: string): string {
 		switch (trust) {
 			case '1mcp-verified':
@@ -107,51 +109,130 @@
 		}
 	}
 
-	$: servers = $mcpServers.length > 0 ? $mcpServers : $installed.map(m => ({
-		id: m.id,
-		name: m.name,
-		description: m.description,
-		version: m.version,
-		runtime: m.runtime,
-		status: m.enabled ? 'running' : 'sleeping' as 'running' | 'sleeping' | 'error',
-		status_detail: m.enabled ? 'PID 21340' : 'Idle',
-		trust: m.id === 'mach1' ? 'internal' : '1mcp-verified',
-		author: m.id === 'mach1' ? '1mcp.in' : 'Anthropic',
-		lifecycle: m.id === 'mach1' ? 'Manual' : 'Auto (lazy)',
-		idle_timeout: m.id === 'mach1' ? undefined : '15 minutes',
-		last_used_at: null,
-		last_used_by: undefined,
-		process: m.enabled ? { pid: 21340, memory_mb: 64.2, cpu_percent: 0.3, uptime_seconds: 8640, restarts: 0 } : undefined,
-		tools_count: m.id === 'github' ? 37 : m.id === 'postgres' ? 12 : m.id === 'fetch' ? 8 : m.id === 'memory' ? 15 : m.id === 'filesystem' ? 10 : m.id === 'git' ? 9 : 0,
-		installed_at: m.installed_at ? new Date(m.installed_at * 1000).toISOString() : new Date().toISOString()
-	}));
+	function requiredEnvKeys(mcp: { patProvider?: string | null }): string[] {
+		if (!mcp.patProvider) return [];
+		return [`${mcp.patProvider.toUpperCase()}_TOKEN`];
+	}
+
+	function getMcpEnvValues(mcpId: string): Record<string, string> {
+		const inst = $installed.find((m) => m.id === mcpId);
+		return inst?.env ?? {};
+	}
+
+	function computeHealth(
+		installedMcp: typeof $installed[number] | undefined,
+		server: typeof $mcpServers[number] | undefined
+	): { status: string; label: string; detail: string | null; dotClass: string; textClass: string } {
+		if (!installedMcp) {
+			return { status: 'not_installed', label: 'Not installed', detail: null, dotClass: 'bg-white/20', textClass: 'text-white/30' };
+		}
+		if (!installedMcp.enabled) {
+			return { status: 'disabled', label: 'Disabled', detail: null, dotClass: 'bg-white/30', textClass: 'text-white/40' };
+		}
+		if (server?.status === 'error') {
+			return { status: 'error', label: 'Error', detail: server.status_detail ?? 'Process failed', dotClass: 'bg-red-500', textClass: 'text-red-400' };
+		}
+		const missing = requiredEnvKeys(installedMcp).filter((k) => !installedMcp.env?.[k]);
+		if (missing.length > 0) {
+			return { status: 'missing_env', label: 'Missing env vars', detail: `Needs ${missing.join(', ')}`, dotClass: 'bg-amber-400', textClass: 'text-amber-400' };
+		}
+		if (server?.status === 'running') {
+			return { status: 'healthy', label: 'Running + Healthy', detail: server.status_detail ?? null, dotClass: 'bg-emerald-500', textClass: 'text-emerald-400' };
+		}
+		return { status: 'disabled', label: 'Disabled', detail: null, dotClass: 'bg-white/30', textClass: 'text-white/40' };
+	}
+
+	// Build unified server list from marketplace + installed + mcpServers
+	$: servers = (() => {
+		const byId = new Map<string, any>();
+
+		// Seed from marketplace (includes not-installed)
+		for (const mkt of $marketplace) {
+			byId.set(mkt.id, {
+				id: mkt.id,
+				name: mkt.name,
+				description: mkt.shortDescription,
+				version: mkt.version,
+				runtime: mkt.runtime,
+				trust: mkt.verificationStatus,
+				author: mkt.author,
+				tools_count: 0,
+				installed: mkt.installed,
+				enabled: false,
+				patProvider: mkt.patProvider,
+				status_raw: null,
+				status_detail: null,
+				last_used_at: null,
+				process: undefined,
+			});
+		}
+
+		// Override with installed data
+		for (const inst of $installed) {
+			const existing = byId.get(inst.id);
+			const server = $mcpServers.find((s) => s.id === inst.id);
+			const health = computeHealth(inst, server);
+
+			byId.set(inst.id, {
+				...(existing ?? {}),
+				id: inst.id,
+				name: inst.name,
+				description: inst.description,
+				version: inst.version,
+				runtime: inst.runtime,
+				installed: true,
+				enabled: inst.enabled,
+				patProvider: inst.patProvider,
+				status_raw: health.status,
+				status_label: health.label,
+				status_detail: health.detail,
+				status_dot: health.dotClass,
+				status_text: health.textClass,
+				trust: existing?.trust ?? 'community',
+				author: existing?.author ?? 'unknown',
+				tools_count: server?.tools_count ?? existing?.tools_count ?? 0,
+				last_used_at: server?.last_used_at ?? null,
+				process: server?.process,
+			});
+		}
+
+		return Array.from(byId.values());
+	})();
 
 	$: filtered = (() => {
 		let result = [...servers];
-		if (activeTab === 'running') result = result.filter(s => s.status === 'running');
-		if (activeTab === 'disabled') result = result.filter(s => s.status === 'sleeping');
+		if (activeTab === 'running') result = result.filter((s) => s.status_raw === 'healthy');
+		if (activeTab === 'disabled') result = result.filter((s) => s.status_raw === 'disabled' || s.status_raw === 'not_installed');
 		if (query.trim()) {
 			const q = query.toLowerCase();
-			result = result.filter(s =>
+			result = result.filter((s) =>
 				s.name.toLowerCase().includes(q) ||
 				s.description.toLowerCase().includes(q) ||
 				s.id.toLowerCase().includes(q)
 			);
 		}
-		if (runtimeFilter !== 'all') result = result.filter(s => s.runtime === runtimeFilter);
-		if (statusFilter !== 'all') result = result.filter(s => s.status === statusFilter);
+		if (runtimeFilter !== 'all') result = result.filter((s) => s.runtime === runtimeFilter);
+		if (statusFilter !== 'all') {
+			result = result.filter((s) => {
+				if (statusFilter === 'running') return s.status_raw === 'healthy';
+				if (statusFilter === 'sleeping') return s.status_raw === 'disabled';
+				if (statusFilter === 'error') return s.status_raw === 'error';
+				return true;
+			});
+		}
 		result.sort((a, b) => {
 			if (sort === 'name') return a.name.localeCompare(b.name);
-			if (sort === 'status') return a.status.localeCompare(b.status);
+			if (sort === 'status') return (a.status_raw ?? '').localeCompare(b.status_raw ?? '');
 			return 0;
 		});
 		return result;
 	})();
 
-	$: installedCount = servers.length;
-	$: runningCount = servers.filter(s => s.status === 'running').length;
-	$: sleepingCount = servers.filter(s => s.status === 'sleeping').length;
-	$: errorCount = servers.filter(s => s.status === 'error').length;
+	$: installedCount = servers.filter((s) => s.installed).length;
+	$: runningCount = servers.filter((s) => s.status_raw === 'healthy').length;
+	$: sleepingCount = servers.filter((s) => s.status_raw === 'disabled').length;
+	$: errorCount = servers.filter((s) => s.status_raw === 'error').length;
+	$: missingEnvCount = servers.filter((s) => s.status_raw === 'missing_env').length;
 
 	async function handleScan() {
 		scanLoading = true;
@@ -191,9 +272,105 @@
 		serverLoading = false;
 	}
 
-	function handleToggle(id: string) {
-		toggleMcp(id);
-		fetchMcpServers();
+	async function handleStart(id: string) {
+		try {
+			await startMCP(id);
+			toast.success('MCP started');
+			await fetchMcpServers();
+		} catch (e) {
+			toast.error('Failed to start MCP');
+		}
+	}
+
+	async function handleStop(id: string) {
+		try {
+			await stopMCP(id);
+			toast.success('MCP stopped');
+			await fetchMcpServers();
+		} catch (e) {
+			toast.error('Failed to stop MCP');
+		}
+	}
+
+	async function handleInstall(id: string) {
+		try {
+			await installMCP(id);
+			toast.success('MCP installed');
+			await fetchInstalled();
+			await fetchMcpServers();
+		} catch (e) {
+			toast.error('Failed to install MCP');
+		}
+	}
+
+	async function openConfigModal(id: string) {
+		const mcp = servers.find((s) => s.id === id);
+		if (!mcp) return;
+		configMcpId = id;
+		configMcpName = mcp.name;
+		configMcpDescription = mcp.description;
+		configMcpHealth = null;
+		configLoading = true;
+		showConfigModal = true;
+
+		try {
+			await fetchServerConfig(id);
+			configMcpConfig = $serverConfig;
+			// Also try a quick health check
+			try {
+				const h = await healthCheck(id);
+				configMcpHealth = h as McpHealthResult;
+			} catch {
+				configMcpHealth = null;
+			}
+		} catch {
+			configMcpConfig = null;
+		}
+		configLoading = false;
+	}
+
+	function closeConfigModal() {
+		showConfigModal = false;
+		configMcpId = null;
+		configMcpConfig = null;
+		configMcpHealth = null;
+	}
+
+	async function handleSaveAndStart(vars: Record<string, string>) {
+		if (!configMcpId) return;
+		try {
+			await setMcpEnv(configMcpId, vars);
+			await startMCP(configMcpId);
+			toast.success('Saved and started MCP');
+			closeConfigModal();
+			await fetchInstalled();
+			await fetchMcpServers();
+		} catch (e) {
+			toast.error('Failed to save or start');
+		}
+	}
+
+	async function handleSaveOnly(vars: Record<string, string>) {
+		if (!configMcpId) return;
+		try {
+			await setMcpEnv(configMcpId, vars);
+			toast.success('Environment saved');
+			closeConfigModal();
+			await fetchInstalled();
+		} catch (e) {
+			toast.error('Failed to save environment');
+		}
+	}
+
+	async function handleTestConnection(): Promise<McpHealthResult> {
+		if (!configMcpId) throw new Error('No MCP selected');
+		const h = await healthCheck(configMcpId);
+		return h as McpHealthResult;
+	}
+
+	async function handleAutoDetect(): Promise<Record<string, string>> {
+		if (!configMcpId) return {};
+		return autoDetectEnv(configMcpId);
 	}
 </script>
 
@@ -209,7 +386,8 @@
 						Manage installed MCP servers.
 						<span class="text-white/50">{installedCount} installed</span>,
 						<span class="text-emerald-400">{runningCount} running</span>,
-						<span class="text-white/40">{sleepingCount} sleeping</span>.
+						<span class="text-amber-400">{missingEnvCount} missing env</span>,
+						<span class="text-red-400">{errorCount} error</span>.
 					</p>
 				</div>
 				<div class="flex items-center gap-3">
@@ -235,7 +413,7 @@
 						{#if tab === 'running'}
 							<span class="ml-1 text-xs text-white/40">({runningCount})</span>
 						{:else if tab === 'disabled'}
-							<span class="ml-1 text-xs text-white/40">({sleepingCount})</span>
+							<span class="ml-1 text-xs text-white/40">({sleepingCount + servers.filter(s => s.status_raw === 'not_installed').length})</span>
 						{:else if tab === 'updates'}
 							<span class="ml-1 text-xs text-white/40">(0)</span>
 						{/if}
@@ -247,7 +425,7 @@
 			</div>
 
 			<!-- Stats Cards -->
-			<div class="grid grid-cols-4 gap-4">
+			<div class="grid grid-cols-5 gap-4">
 				<div class="rounded-xl bg-white/[0.02] border border-white/[0.06] p-4 flex items-center gap-3">
 					<div class="w-10 h-10 rounded-lg bg-orange-500/10 text-orange-400 flex items-center justify-center">
 						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
@@ -267,21 +445,30 @@
 					</div>
 				</div>
 				<div class="rounded-xl bg-white/[0.02] border border-white/[0.06] p-4 flex items-center gap-3">
+					<div class="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center">
+						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+					</div>
+					<div>
+						<p class="text-xl font-bold text-white/90">{missingEnvCount}</p>
+						<p class="text-xs text-white/30">Missing Env</p>
+					</div>
+				</div>
+				<div class="rounded-xl bg-white/[0.02] border border-white/[0.06] p-4 flex items-center gap-3">
+					<div class="w-10 h-10 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center">
+						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+					</div>
+					<div>
+						<p class="text-xl font-bold text-white/90">{errorCount}</p>
+						<p class="text-xs text-white/30">Errored</p>
+					</div>
+				</div>
+				<div class="rounded-xl bg-white/[0.02] border border-white/[0.06] p-4 flex items-center gap-3">
 					<div class="w-10 h-10 rounded-lg bg-white/5 text-white/40 flex items-center justify-center">
 						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
 					</div>
 					<div>
 						<p class="text-xl font-bold text-white/90">{sleepingCount}</p>
-						<p class="text-xs text-white/30">Sleeping</p>
-					</div>
-				</div>
-				<div class="rounded-xl bg-white/[0.02] border border-white/[0.06] p-4 flex items-center gap-3">
-					<div class="w-10 h-10 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center">
-						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-					</div>
-					<div>
-						<p class="text-xl font-bold text-white/90">{errorCount}</p>
-						<p class="text-xs text-white/30">Errored</p>
+						<p class="text-xs text-white/30">Disabled</p>
 					</div>
 				</div>
 			</div>
@@ -302,7 +489,7 @@
 				<select bind:value={statusFilter} class="bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 text-xs text-white/60 focus:outline-none focus:border-orange-500/30">
 					<option value="all">All Statuses</option>
 					<option value="running">Running</option>
-					<option value="sleeping">Sleeping</option>
+					<option value="sleeping">Disabled</option>
 					<option value="error">Error</option>
 				</select>
 				<select bind:value={sort} class="bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 text-xs text-white/60 focus:outline-none focus:border-orange-500/30">
@@ -329,9 +516,6 @@
 								<th class="pb-2 pt-3 px-4 text-[11px] font-medium text-white/30 uppercase tracking-wider">Name</th>
 								<th class="pb-2 pt-3 text-[11px] font-medium text-white/30 uppercase tracking-wider">Runtime</th>
 								<th class="pb-2 pt-3 text-[11px] font-medium text-white/30 uppercase tracking-wider">Status</th>
-								<th class="pb-2 pt-3 text-[11px] font-medium text-white/30 uppercase tracking-wider">Lifecycle</th>
-								<th class="pb-2 pt-3 text-[11px] font-medium text-white/30 uppercase tracking-wider">Version</th>
-								<th class="pb-2 pt-3 text-[11px] font-medium text-white/30 uppercase tracking-wider">Last Used</th>
 								<th class="pb-2 pt-3 text-[11px] font-medium text-white/30 uppercase tracking-wider">Tools</th>
 								<th class="pb-2 pt-3 text-[11px] font-medium text-white/30 uppercase tracking-wider text-right">Actions</th>
 							</tr>
@@ -359,33 +543,52 @@
 									</td>
 									<td>
 										<div class="flex flex-col gap-0.5">
-											<span class="flex items-center gap-1.5 {statusClass(server.status)}">
-												<span class="w-1.5 h-1.5 rounded-full {statusDot(server.status)}"></span>
-												{server.status.charAt(0).toUpperCase() + server.status.slice(1)}
+											<span class="flex items-center gap-1.5 {server.status_text}">
+												<span class="w-1.5 h-1.5 rounded-full {server.status_dot}"></span>
+												{server.status_label}
 											</span>
 											{#if server.status_detail}
 												<span class="text-[10px] text-white/20">{server.status_detail}</span>
 											{/if}
 										</div>
 									</td>
-									<td class="text-white/40">{server.lifecycle}</td>
-									<td class="text-white/50">{server.version}</td>
-									<td class="text-white/30">{formatTimeAgo(server.last_used_at)}</td>
 									<td class="text-white/50">{server.tools_count}</td>
 									<td class="text-right pr-4">
 										<div class="flex items-center justify-end gap-1">
-											<button
-												on:click|stopPropagation={() => handleToggle(server.id)}
-												class="p-1.5 rounded-md hover:bg-white/[0.06] text-white/30 hover:text-white/70 transition-colors"
-												title={server.status === 'running' ? 'Stop' : 'Start'}
-											>
-												{#if server.status === 'running'}
-													<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-												{:else}
-													<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+											{#if server.installed}
+												<button
+													on:click|stopPropagation={() => openConfigModal(server.id)}
+													class="p-1.5 rounded-md hover:bg-white/[0.06] text-white/30 hover:text-white/70 transition-colors"
+													title="Configure"
+												>
+													<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+												</button>
+												{#if server.status_raw === 'healthy'}
+													<button
+														on:click|stopPropagation={() => handleStop(server.id)}
+														class="p-1.5 rounded-md hover:bg-white/[0.06] text-white/30 hover:text-white/70 transition-colors"
+														title="Stop"
+													>
+														<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+													</button>
+												{:else if server.status_raw !== 'error'}
+													<button
+														on:click|stopPropagation={() => handleStart(server.id)}
+														class="p-1.5 rounded-md hover:bg-white/[0.06] text-white/30 hover:text-emerald-400 transition-colors"
+														title="Start"
+													>
+														<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+													</button>
 												{/if}
-											</button>
-	
+											{:else}
+												<button
+													on:click|stopPropagation={() => handleInstall(server.id)}
+													class="px-2 py-1 rounded-md bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition-colors text-[10px] font-medium"
+													title="Install"
+												>
+													Install
+												</button>
+											{/if}
 										</div>
 									</td>
 								</tr>
@@ -412,12 +615,48 @@
 											<span class="px-1.5 py-0.5 rounded text-[9px] font-medium border {trustClass(server.trust)}">{server.trust}</span>
 										</div>
 									</div>
-									<span class="w-2 h-2 rounded-full {statusDot(server.status)}"></span>
+									<span class="w-2 h-2 rounded-full {server.status_dot}"></span>
 								</div>
 								<p class="text-[11px] text-white/25 mb-3 line-clamp-2">{server.description}</p>
-								<div class="flex items-center justify-between">
+								<div class="flex items-center justify-between mb-3">
 									<span class="px-2 py-0.5 rounded text-[10px] font-medium {runtimeClass(server.runtime)}">{server.runtime}</span>
 									<span class="text-[10px] text-white/30">{server.tools_count} tools</span>
+								</div>
+								<div class="flex items-center gap-1.5">
+									{#if server.installed}
+										<button
+											on:click|stopPropagation={() => openConfigModal(server.id)}
+											class="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md bg-white/[0.03] border border-white/[0.06] text-[10px] text-white/50 hover:text-white/80 hover:bg-white/[0.06] transition-colors"
+										>
+											<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+											Configure
+										</button>
+										{#if server.status_raw === 'healthy'}
+											<button
+												on:click|stopPropagation={() => handleStop(server.id)}
+												class="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md bg-white/[0.03] border border-white/[0.06] text-[10px] text-white/50 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+											>
+												<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+												Stop
+											</button>
+										{:else if server.status_raw !== 'error'}
+											<button
+												on:click|stopPropagation={() => handleStart(server.id)}
+												class="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+											>
+												<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+												Start
+											</button>
+										{/if}
+									{:else}
+										<button
+											on:click|stopPropagation={() => handleInstall(server.id)}
+											class="w-full flex items-center justify-center gap-1 py-1.5 rounded-md bg-orange-500/10 border border-orange-500/20 text-[10px] text-orange-400 hover:bg-orange-500/20 transition-colors"
+										>
+											<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+											Install
+										</button>
+									{/if}
 								</div>
 							</div>
 						{/each}
@@ -452,10 +691,22 @@
 						</div>
 					</div>
 					<div class="flex items-center gap-2">
-						<span class="flex items-center gap-1.5 text-[11px] {statusClass($serverDetail.status)}">
-							<span class="w-1.5 h-1.5 rounded-full {statusDot($serverDetail.status)}"></span>
-							{$serverDetail.status.charAt(0).toUpperCase() + $serverDetail.status.slice(1)}
-						</span>
+						{#if $serverDetail.status === 'running'}
+							<span class="flex items-center gap-1.5 text-[11px] text-emerald-400">
+								<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+								Running
+							</span>
+						{:else if $serverDetail.status === 'error'}
+							<span class="flex items-center gap-1.5 text-[11px] text-red-400">
+								<span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+								Error
+							</span>
+						{:else}
+							<span class="flex items-center gap-1.5 text-[11px] text-white/40">
+								<span class="w-1.5 h-1.5 rounded-full bg-white/30"></span>
+								Sleeping
+							</span>
+						{/if}
 						<button on:click={() => selectServer(null)} aria-label="Close" class="text-white/20 hover:text-white/60 transition-colors p-1">
 							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
 						</button>
@@ -494,7 +745,7 @@
 							<div>
 								<p class="text-[10px] text-white/30 uppercase tracking-wider mb-1">Status</p>
 								<p class="text-xs text-white/70 flex items-center gap-1.5">
-									<span class="w-1.5 h-1.5 rounded-full {statusDot($serverDetail.status)}"></span>
+									<span class="w-1.5 h-1.5 rounded-full {$serverDetail.status === 'running' ? 'bg-emerald-500' : $serverDetail.status === 'error' ? 'bg-red-500' : 'bg-white/30'}"></span>
 									{$serverDetail.status.charAt(0).toUpperCase() + $serverDetail.status.slice(1)}
 								</p>
 							</div>
@@ -536,9 +787,6 @@
 								</div>
 							{/if}
 						</div>
-						<button on:click={() => toast.info('Lifecycle configuration coming soon')} class="mt-3 w-full py-1.5 rounded-md bg-white/[0.03] border border-white/[0.06] text-[11px] text-white/50 hover:text-white/80 hover:bg-white/[0.06] transition-colors">
-							Edit Lifecycle
-						</button>
 					</div>
 
 					<!-- Last Used -->
@@ -646,3 +894,18 @@
 		</div>
 	{/if}
 </div>
+
+{#if showConfigModal && configMcpId}
+	<McpConfigModal
+		mcpId={configMcpId}
+		mcpName={configMcpName}
+		mcpDescription={configMcpDescription}
+		config={configMcpConfig}
+		health={configMcpHealth}
+		onClose={closeConfigModal}
+		onSaveAndStart={handleSaveAndStart}
+		onSaveOnly={handleSaveOnly}
+		onTestConnection={handleTestConnection}
+		onAutoDetect={handleAutoDetect}
+	/>
+{/if}

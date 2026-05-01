@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/envtmpl"
+	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/install"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/manifest"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/observability"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/proto"
@@ -28,10 +29,13 @@ import (
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/sandbox"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/secrets"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/security"
+	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/semantic"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/upstream"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-) // NamespaceSep separates upstream id from the original tool name in surfaced
+)
+
+// NamespaceSep separates upstream id from the original tool name in surfaced
 // tool names. Kept in sync with the (now legacy) router constant.
 const NamespaceSep = "__"
 
@@ -47,6 +51,9 @@ type Supervisor struct {
 	warmupTimeout time.Duration
 	registry      *registry.DB
 	metrics       *observability.Metrics
+
+	getManifest func(id string) (*manifest.Manifest, error)
+	secrets     *secrets.Store
 }
 
 type managed struct {
@@ -67,6 +74,7 @@ type managed struct {
 	tools     []proto.Tool // namespaced
 	blocked   map[string]registry.ToolReview
 	verified  bool
+	disabled  bool
 }
 
 // Options configures a Supervisor at construction time.
@@ -93,72 +101,94 @@ func New(entries []registry.Entry, getManifest func(id string) (*manifest.Manife
 		warmupTimeout: opts.WarmupTimeout,
 		registry:      opts.Registry,
 		metrics:       opts.Metrics,
+		getManifest:   getManifest,
+		secrets:       sec,
 	}
 	for _, e := range entries {
-		m, err := getManifest(e.ID)
+		mg, err := s.buildManaged(e)
 		if err != nil {
-			s.logger.Warn("skip MCP: cannot load manifest", "id", e.ID, "err", err)
 			continue
-		}
-		drv, err := sandbox.Pick(m)
-		if err != nil {
-			s.logger.Warn("skip MCP: no driver", "id", e.ID, "err", err)
-			continue
-		}
-		// Resolve env: registry non-secret + secrets (secrets win for same key).
-		envMap := map[string]string{}
-		for k, v := range e.Env {
-			envMap[k] = v
-		}
-		if sec != nil {
-			for k, v := range sec.Get(e.ID) {
-				envMap[k] = v
-			}
-		}
-		// Apply defaults from manifest envSchema for any keys still unset.
-		for _, ev := range m.EnvSchema {
-			if _, ok := envMap[ev.Name]; !ok && ev.Default != "" {
-				envMap[ev.Name] = ev.Default
-			}
-		}
-		// Build the lookup table used for ${VAR} expansion in command/args.
-		// Order: process env (low) <- envMap (high), so users can override
-		// system env per-MCP, but unset references can still resolve from the
-		// parent process env (e.g. PATH-like vars or test fixtures).
-		lookup := map[string]string{}
-		for _, kv := range os.Environ() {
-			if i := strings.IndexByte(kv, '='); i > 0 {
-				lookup[kv[:i]] = kv[i+1:]
-			}
-		}
-		for k, v := range envMap {
-			lookup[k] = v
-		}
-		// Template-expand command/args using the lookup so manifests can
-		// reference ${VAR} without the child process doing its own expansion.
-		cmd, missingCmd := envtmpl.Expand(e.Command, lookup)
-		args, missingArgs := envtmpl.ExpandAll(e.Args, lookup)
-		missing := append(missingCmd, missingArgs...)
-		if len(missing) > 0 {
-			s.logger.Warn("MCP has unresolved ${VAR} refs; tools/call will fail until configured",
-				"id", e.ID, "missing", missing)
-		}
-
-		mg := &managed{
-			id:       e.ID,
-			manifest: m,
-			driver:   drv,
-			command:  cmd,
-			args:     args,
-			cwd:      e.Cwd,
-			env:      envMap,
-			idleSec:  m.IdleShutdown(),
-			blocked:  map[string]registry.ToolReview{},
 		}
 		s.items[e.ID] = mg
 		s.order = append(s.order, e.ID)
 	}
 	return s, nil
+}
+
+func (s *Supervisor) buildManaged(e registry.Entry) (*managed, error) {
+	m, err := s.getManifest(e.ID)
+	if err != nil {
+		s.logger.Warn("skip MCP: cannot load manifest", "id", e.ID, "err", err)
+		return nil, err
+	}
+	drv, err := sandbox.Pick(m)
+	if err != nil {
+		s.logger.Warn("skip MCP: no driver", "id", e.ID, "err", err)
+		return nil, err
+	}
+	// Resolve env: registry non-secret + secrets (secrets win for same key).
+	envMap := map[string]string{}
+	for k, v := range e.Env {
+		envMap[k] = v
+	}
+	if s.secrets != nil {
+		for k, v := range s.secrets.Get(e.ID) {
+			envMap[k] = v
+		}
+	}
+	// Resolve env aliases: if the canonical name is not set but an alias
+	// exists in the process environment, copy it under the canonical name.
+	aliases := m.ResolveEnvKeys()
+	for alias, canonical := range aliases {
+		if _, set := envMap[canonical]; set {
+			continue
+		}
+		if aliasVal, ok := os.LookupEnv(alias); ok {
+			envMap[canonical] = aliasVal
+			s.logger.Info("resolved env alias", "mcp", e.ID, "alias", alias, "canonical", canonical)
+		}
+	}
+	// Apply defaults from manifest envSchema for any keys still unset.
+	for _, ev := range m.EnvSchema {
+		if _, ok := envMap[ev.Name]; !ok && ev.Default != "" {
+			envMap[ev.Name] = ev.Default
+		}
+	}
+	// Build the lookup table used for ${VAR} expansion in command/args.
+	// Order: process env (low) <- envMap (high), so users can override
+	// system env per-MCP, but unset references can still resolve from the
+	// parent process env (e.g. PATH-like vars or test fixtures).
+	lookup := map[string]string{}
+	for _, kv := range os.Environ() {
+		if i := strings.IndexByte(kv, '='); i > 0 {
+			lookup[kv[:i]] = kv[i+1:]
+		}
+	}
+	for k, v := range envMap {
+		lookup[k] = v
+	}
+	// Template-expand command/args using the lookup so manifests can
+	// reference ${VAR} without the child process doing its own expansion.
+	cmd, missingCmd := envtmpl.Expand(e.Command, lookup)
+	args, missingArgs := envtmpl.ExpandAll(e.Args, lookup)
+	missing := append(missingCmd, missingArgs...)
+	if len(missing) > 0 {
+		s.logger.Warn("MCP has unresolved ${VAR} refs; tools/call will fail until configured",
+			"id", e.ID, "missing", missing)
+	}
+
+	mg := &managed{
+		id:       e.ID,
+		manifest: m,
+		driver:   drv,
+		command:  cmd,
+		args:     args,
+		cwd:      e.Cwd,
+		env:      envMap,
+		idleSec:  m.IdleShutdown(),
+		blocked:  map[string]registry.ToolReview{},
+	}
+	return mg, nil
 }
 
 // Start performs parallel warmup: for each item, briefly start the upstream,
@@ -173,6 +203,34 @@ func (s *Supervisor) Start(ctx context.Context) {
 			defer wg.Done()
 			s.warmup(ctx, mg)
 		}()
+	}
+	wg.Wait()
+}
+
+// BackgroundWarmup triggers warmup for all enabled MCPs without blocking.
+// Callers typically invoke this after the MCP initialize handshake completes.
+func (s *Supervisor) BackgroundWarmup(ctx context.Context) {
+	s.mu.RLock()
+	items := make([]*managed, 0, len(s.order))
+	for _, id := range s.order {
+		if mg := s.items[id]; mg != nil {
+			mg.mu.Lock()
+			disabled := mg.disabled
+			mg.mu.Unlock()
+			if !disabled {
+				items = append(items, mg)
+			}
+		}
+	}
+	s.mu.RUnlock()
+
+	var wg sync.WaitGroup
+	for _, mg := range items {
+		wg.Add(1)
+		go func(mg *managed) {
+			defer wg.Done()
+			s.warmup(ctx, mg)
+		}(mg)
 	}
 	wg.Wait()
 }
@@ -438,5 +496,337 @@ func (s *Supervisor) Close() error {
 func (s *Supervisor) IDs() []string {
 	out := make([]string, len(s.order))
 	copy(out, s.order)
+	return out
+}
+
+// Install validates and persists a manifest, then adds it to the supervisor.
+func (s *Supervisor) Install(ctx context.Context, m *manifest.Manifest, installer *install.Installer) error {
+	if _, err := installer.Install(ctx, m); err != nil {
+		return err
+	}
+	// Rebuild managed entry from registry.
+	if s.registry == nil {
+		return nil
+	}
+	e, _, err := s.registry.Get(ctx, m.ID)
+	if err != nil {
+		return err
+	}
+	mg, err := s.buildManaged(*e)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.items[m.ID] = mg
+	found := false
+	for _, id := range s.order {
+		if id == m.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		s.order = append(s.order, m.ID)
+	}
+	s.mu.Unlock()
+	return nil
+}
+
+// Enable sets an MCP as enabled and warms it up.
+func (s *Supervisor) Enable(ctx context.Context, id string) error {
+	if s.registry != nil {
+		if err := s.registry.SetEnabled(ctx, id, true); err != nil {
+			return err
+		}
+	}
+	s.mu.Lock()
+	mg, ok := s.items[id]
+	s.mu.Unlock()
+	if !ok {
+		if s.registry == nil {
+			return fmt.Errorf("registry not available")
+		}
+		e, _, err := s.registry.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		var err2 error
+		mg, err2 = s.buildManaged(*e)
+		if err2 != nil {
+			return err2
+		}
+		s.mu.Lock()
+		s.items[id] = mg
+		found := false
+		for _, oid := range s.order {
+			if oid == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			s.order = append(s.order, id)
+		}
+		s.mu.Unlock()
+	} else {
+		mg.mu.Lock()
+		mg.disabled = false
+		mg.mu.Unlock()
+	}
+	s.warmup(ctx, mg)
+	return nil
+}
+
+// Disable sets an MCP as enabled=false and shuts down its process.
+func (s *Supervisor) Disable(ctx context.Context, id string) error {
+	if s.registry != nil {
+		if err := s.registry.SetEnabled(ctx, id, false); err != nil {
+			return err
+		}
+	}
+	s.mu.Lock()
+	mg, ok := s.items[id]
+	s.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	mg.mu.Lock()
+	mg.disabled = true
+	c := mg.client
+	mg.client = nil
+	if mg.idleTimer != nil {
+		mg.idleTimer.Stop()
+		mg.idleTimer = nil
+	}
+	mg.mu.Unlock()
+	if c != nil {
+		_ = c.Close()
+	}
+	return nil
+}
+
+// SetEnv updates the non-secret env in the registry and restarts the MCP
+// if it is running so the new values take effect.
+func (s *Supervisor) SetEnv(ctx context.Context, id string, env map[string]string) error {
+	if s.registry != nil {
+		if err := s.registry.SetEnv(ctx, id, env); err != nil {
+			return err
+		}
+	}
+	s.mu.Lock()
+	mg, ok := s.items[id]
+	s.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	// Stop running process.
+	mg.mu.Lock()
+	c := mg.client
+	mg.client = nil
+	if mg.idleTimer != nil {
+		mg.idleTimer.Stop()
+		mg.idleTimer = nil
+	}
+	mg.starting = nil
+	mg.startErr = nil
+	mg.mu.Unlock()
+	if c != nil {
+		_ = c.Close()
+	}
+	// Rebuild managed entry.
+	if s.registry == nil {
+		return nil
+	}
+	e, _, err := s.registry.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	newMg, err := s.buildManaged(*e)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.items[id] = newMg
+	s.mu.Unlock()
+	return nil
+}
+
+// MCPStatus is a snapshot of an MCP's runtime state.
+type MCPStatus struct {
+	ID          string
+	Name        string
+	Installed   bool
+	Enabled     bool
+	Running     bool
+	Healthy     bool
+	EnvComplete bool
+	ToolCount   int
+	LastError   string
+}
+
+// GetMCPStatus returns runtime status for a single MCP.
+func (s *Supervisor) GetMCPStatus(id string) (*MCPStatus, error) {
+	s.mu.RLock()
+	mg, ok := s.items[id]
+	s.mu.RUnlock()
+	if !ok {
+		return &MCPStatus{ID: id, Installed: false}, nil
+	}
+	mg.mu.Lock()
+	running := mg.client != nil
+	toolCount := len(mg.tools)
+	lastErr := ""
+	if mg.startErr != nil {
+		lastErr = mg.startErr.Error()
+	}
+	disabled := mg.disabled
+	mg.mu.Unlock()
+
+	enabled := false
+	if s.registry != nil {
+		if e, _, err := s.registry.Get(context.Background(), id); err == nil {
+			enabled = e.Enabled && !disabled
+		}
+	}
+
+	envComplete := true
+	for _, ev := range mg.manifest.EnvSchema {
+		if ev.Required {
+			if _, ok := mg.env[ev.Name]; !ok {
+				envComplete = false
+				break
+			}
+		}
+	}
+
+	return &MCPStatus{
+		ID:          id,
+		Name:        mg.manifest.Name,
+		Installed:   true,
+		Enabled:     enabled,
+		Running:     running,
+		Healthy:     running && toolCount > 0,
+		EnvComplete: envComplete,
+		ToolCount:   toolCount,
+		LastError:   lastErr,
+	}, nil
+}
+
+// HealthResult aggregates health signals for one MCP.
+type HealthResult struct {
+	ID        string
+	Status    string
+	ProcessOK bool
+	AuthOK    bool
+	Message   string
+}
+
+// HealthCheck starts the MCP and verifies it can return a tools list.
+// For rate-limited MCPs it skips the actual API call.
+func (s *Supervisor) HealthCheck(ctx context.Context, id string) (*HealthResult, error) {
+	s.mu.RLock()
+	mg, ok := s.items[id]
+	s.mu.RUnlock()
+	if !ok {
+		return &HealthResult{ID: id, Status: "unknown", Message: "not installed"}, nil
+	}
+
+	authOK := true
+	var missingVars []string
+	for _, ev := range mg.manifest.EnvSchema {
+		if ev.Required {
+			if _, ok := mg.env[ev.Name]; !ok {
+				authOK = false
+				missingVars = append(missingVars, ev.Name)
+			}
+		}
+	}
+	if !authOK {
+		return &HealthResult{
+			ID:        id,
+			Status:    "needs_config",
+			ProcessOK: false,
+			AuthOK:    false,
+			Message:   "missing required env: " + strings.Join(missingVars, ", "),
+		}, nil
+	}
+
+	c, err := s.startLocked(ctx, mg)
+	if err != nil {
+		return &HealthResult{
+			ID:        id,
+			Status:    "unhealthy",
+			ProcessOK: false,
+			AuthOK:    true,
+			Message:   "failed to start: " + err.Error(),
+		}, nil
+	}
+
+	raw := c.Tools()
+	processOK := len(raw) > 0
+
+	status := "healthy"
+	if !processOK {
+		status = "unhealthy"
+	}
+
+	return &HealthResult{
+		ID:        id,
+		Status:    status,
+		ProcessOK: processOK,
+		AuthOK:    true,
+		Message:   "",
+	}, nil
+}
+
+// Stop force-stops an MCP process immediately.
+func (s *Supervisor) Stop(id string) error {
+	s.mu.RLock()
+	mg, ok := s.items[id]
+	s.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("unknown MCP %s", id)
+	}
+	mg.mu.Lock()
+	c := mg.client
+	mg.client = nil
+	if mg.idleTimer != nil {
+		mg.idleTimer.Stop()
+		mg.idleTimer = nil
+	}
+	mg.mu.Unlock()
+	if c != nil {
+		return c.Close()
+	}
+	return nil
+}
+
+// RankedTool pairs a tool with its semantic relevance score.
+type RankedTool struct {
+	Tool  proto.Tool
+	Score float64
+}
+
+// RankToolsWithScores returns the top-k tools with cosine-similarity scores.
+func (s *Supervisor) RankToolsWithScores(query string, k int) []RankedTool {
+	tools := s.Tools()
+	if len(tools) == 0 || query == "" {
+		return nil
+	}
+	docs := make([]semantic.Doc, 0, len(tools))
+	byName := make(map[string]proto.Tool, len(tools))
+	for _, t := range tools {
+		idPart, suffix, _ := strings.Cut(t.Name, NamespaceSep)
+		text := strings.Join([]string{idPart, suffix, t.Description}, " ")
+		docs = append(docs, semantic.Doc{ID: t.Name, Text: text})
+		byName[t.Name] = t
+	}
+	results := semantic.Build(docs).Rank(query, k)
+	out := make([]RankedTool, 0, len(results))
+	for _, r := range results {
+		if t, ok := byName[r.ID]; ok {
+			out = append(out, RankedTool{Tool: t, Score: r.Score})
+		}
+	}
 	return out
 }

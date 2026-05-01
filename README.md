@@ -1,13 +1,12 @@
-# 1mcp — local-first MCP control plane
+# 1mcp — One router for all your AI tools
 
-Install MCP servers once, approve them once, and use them safely across Cursor, Claude Desktop, VS Code, Claude Code, Windsurf, and more.
-
-No duplicated configs. No scattered credentials. No silent tool changes.
+Install MCP servers once, connect every AI client. No duplicated configs, no scattered credentials.
 
 ![1mcp Hub UI demo](https://1mcp.in/assets/hub-demo.gif)
 
 [![CI](https://github.com/SaiAvinashPatoju/1mcp.in/actions/workflows/ci.yml/badge.svg)](https://github.com/SaiAvinashPatoju/1mcp.in/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/SaiAvinashPatoju/1mcp.in)](https://github.com/SaiAvinashPatoju/1mcp.in/releases)
 
 ## Install
 
@@ -19,34 +18,43 @@ irm https://install.1mcp.in/windows | iex  # Windows
 ```bash
 mach1ctl start                 # launch router + Hub UI
 mach1ctl install github        # install GitHub MCP
-mach1ctl connect cursor        # connect Cursor
-mach1ctl connect claude        # connect Claude Desktop
+mach1ctl connect cursor        # connect Cursor (replaces direct MCPs)
 mach1ctl doctor                # verify everything works
 ```
 
 ## Why this exists
 
-MCP is becoming the USB-C of AI tools, but local setup is still a mess. Every AI client needs its own config file. Every MCP needs its own credentials pasted N times. Every teammate repeats the same ceremony.
+Every AI client (Cursor, VS Code, Claude Desktop, Claude Code, Windsurf, Codex) needs its own MCP config file. If you use GitHub, Slack, Linear, Notion, and Postgres MCPs with 4 clients, you configure 20 entries and paste credentials 20 times.
 
-1mcp replaces all of that with a single local router process and one Hub UI. Install once. Approve once. Connect everywhere.
+1mcp replaces all of them with **one router process** and **one Hub UI**. Install each MCP once, connect every client with one command. When mach1 connects to a client, it **takes over** the MCP config — removing all direct entries so the AI client has no choice but to route every tool call through mach1. Your original config is backed up and restored when you disconnect.
 
-## Killer workflow
-
-**The problem:** You use Cursor, Claude Desktop, VS Code, and Claude Code. You configure GitHub MCP four times, paste your token four times, and update four configs when something breaks.
-
-**With 1mcp:**
+## Quick start
 
 ```bash
 mach1ctl install github
 mach1ctl env set github GITHUB_TOKEN=ghp_...
-mach1ctl connect all
+mach1ctl connect cursor        # replaces all cursor MCPs with mach1
+mach1ctl connect claude        # replaces all claude MCPs with mach1
 ```
 
-One install. One credential entry. Every client can now call `github__list_pull_requests`, `github__create_issue`, etc.
+One install. One credential entry. Every client uses `github__list_pull_requests`, `github__create_issue`, etc.
 
-**When a tool changes:**
+To undo:
+```bash
+mach1ctl disconnect cursor     # restores your original MCP config
+```
 
-Upstream MCP silently renames `create_issue` to `create_issue_and_execute_hook`? 1mcp detects the hash mismatch, marks the tool `PENDING_REVIEW`, and blocks calls until you approve or reject the diff. No surprises.
+## Supported clients
+
+| Client | Connect | Status |
+|---|---|---|
+| VS Code / GitHub Copilot | `mach1ctl connect vscode` | ✅ Supported |
+| Cursor | `mach1ctl connect cursor` | ✅ Supported |
+| Claude Desktop | `mach1ctl connect claude` | ✅ Supported |
+| Claude Code | `mach1ctl connect claudecode` | ✅ Supported |
+| Windsurf | `mach1ctl connect windsurf` | ✅ Supported |
+| Codex | `mach1ctl connect codex` | ✅ Supported |
+| OpenCode | `mach1ctl connect opencode` | ✅ Supported |
 
 ## Security model
 
@@ -59,34 +67,21 @@ Upstream MCP silently renames `create_issue` to `create_issue_and_execute_hook`?
 | Credential storage | Secrets stored locally in OSS version, never logged. Team Pro uses AES-256-GCM vault. |
 | Catalog signing | Community entries reviewed and signed by maintainers. No auto-approval. |
 
-## Supported clients
+## Marketplace
 
-| Client | Connect |
-|---|---|
-| VS Code / GitHub Copilot | `mach1ctl connect vscode` |
-| Cursor | `mach1ctl connect cursor` |
-| Claude Desktop | `mach1ctl connect claude` |
-| Claude Code | `mach1ctl connect claude-code` |
-| Windsurf | `mach1ctl connect windsurf` |
-| OpenCode / Codex | `mach1ctl connect opencode` |
-
-## Marketplace trust
-
-The catalog at `packages/registry-index/index.json` carries trust labels:
+The catalog at `packages/registry-index/index.json` has 50+ MCPs with trust labels:
 
 - **anthropic-official** — from the Anthropic MCP catalog
 - **1mcp.in-verified** — reviewed and tested by maintainers
 - **community** — submitted via PR, signed only after human review
 
-18 servers ship now. To add one, see [CONTRIBUTING_MCP.md](CONTRIBUTING_MCP.md).
+To add an MCP to the marketplace, see [CONTRIBUTING_MCP.md](CONTRIBUTING_MCP.md).
 
-## Verified packs
+## Team Pro
 
-```bash
-mach1ctl pack install dev    # GitHub, Filesystem, Playwright, Context7
-mach1ctl pack install data   # Postgres, SQLite, BigQuery, DuckDB
-mach1ctl pack install web    # Fetch, Firecrawl, Browserbase
-```
+Shared MCP configuration across your team, credential vaulting, admin approval gates, activity logs, custom agents, and usage dashboards. 5-50 seats at ₹1,999/seat/month.
+
+[1mcp.in/team](https://1mcp.in/team) — waitlist open.
 
 ## Comparison
 
@@ -99,13 +94,7 @@ mach1ctl pack install web    # Fetch, Firecrawl, Browserbase
 | Signed catalog installs | ✅ | ❌ | Sometimes |
 | Local credential storage | ✅ | Manual | Usually centralized |
 | Lazy MCP startup | ✅ | ❌ | Depends |
-| Simple dev install | ✅ | ❌ | ❌ |
-
-## Team Pro
-
-Shared MCP configuration across your team, credential vaulting, admin approval gates, activity logs, usage dashboards, and pre-built agents for engineering, sales, and operations.
-
-[1mcp.in/team](https://1mcp.in/team) — waitlist open.
+| One-command connect | ✅ | ❌ | ❌ |
 
 ## From source
 
@@ -135,3 +124,7 @@ scripts/                 Build, install, E2E helpers
 ## License
 
 Apache 2.0. See [LICENSE](LICENSE).
+
+---
+
+If 1mcp saves you time, [star the repo](https://github.com/SaiAvinashPatoju/1mcp.in) ⭐

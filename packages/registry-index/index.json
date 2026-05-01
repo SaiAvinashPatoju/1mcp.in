@@ -699,11 +699,12 @@
         "label": "GitHub Personal Access Token",
         "description": "Fine-grained PAT with the scopes you want the agent to have.",
         "secret": true,
-        "required": true
+        "required": true,
+        "aliases": ["GITHUB_TOKEN", "GH_TOKEN"]
       }
     ],
     "verification": "anthropic-official",
-    "sha256": "bd8bf470030c721c8ff2a4cb25db94fbcab6d82cca988e384a99f4adb625a4c4"
+    "sha256": "3851f6f4d25b7e964821333dae4aaf3043d6e17a867c1409c8a2e6c78ff466bc"
   },
   {
     "id": "gitlab",
@@ -1285,11 +1286,12 @@
         "label": "PostgreSQL connection string",
         "description": "e.g. postgresql://user:pass@host:5432/dbname",
         "secret": true,
-        "required": true
+        "required": true,
+        "aliases": ["DATABASE_URL", "POSTGRES_URL"]
       }
     ],
     "verification": "anthropic-official",
-    "sha256": "de53755bd3e75ff97c797c3b3ff5b78ab92a84a9383b098884c62ae14b8ab2e4"
+    "sha256": "42d7e767c6c324aa9174687b9c0b12fa522c717dfc631e59edc378284eb04624"
   },
   {
     "id": "puppeteer",
@@ -1489,7 +1491,8 @@
         "label": "Slack Bot Token",
         "description": "Bot OAuth token starting with xoxb-",
         "secret": true,
-        "required": true
+        "required": true,
+        "aliases": ["SLACK_TOKEN"]
       },
       {
         "name": "SLACK_TEAM_ID",
@@ -1498,7 +1501,7 @@
       }
     ],
     "verification": "anthropic-official",
-    "sha256": "b2f4b7ebfedfc9543d2cda1da12c0f44b484bdc25a7afdfcae4e08b795696c26"
+    "sha256": "d0484f7319cc95bc6359a1c30b78f3b001478ba6628d0371921df495183aa9de"
   },
   {
     "id": "sqlite",

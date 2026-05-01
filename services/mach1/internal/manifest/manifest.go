@@ -58,12 +58,13 @@ type Mount struct {
 }
 
 type EnvVar struct {
-	Name        string `json:"name"`
-	Label       string `json:"label,omitempty"`
-	Description string `json:"description,omitempty"`
-	Secret      bool   `json:"secret,omitempty"`
-	Required    bool   `json:"required,omitempty"`
-	Default     string `json:"default,omitempty"`
+	Name        string   `json:"name"`
+	Label       string   `json:"label,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Secret      bool     `json:"secret,omitempty"`
+	Required    bool     `json:"required,omitempty"`
+	Default     string   `json:"default,omitempty"`
+	Aliases     []string `json:"aliases,omitempty"`
 }
 
 type Permissions struct {
@@ -99,6 +100,9 @@ func (m *Manifest) Validate() error {
 	}
 	if !verPattern.MatchString(m.Version) {
 		return fmt.Errorf("invalid version %q", m.Version)
+	}
+	if m.Transport == "" {
+		m.Transport = "stdio"
 	}
 	switch m.Transport {
 	case "stdio", "sse", "http":
@@ -151,4 +155,18 @@ func (m *Manifest) IdleShutdown() int {
 		return 60
 	}
 	return m.Lifecycle.IdleShutdownSeconds
+}
+
+// ResolveEnvKeys returns a mapping from alias names to the canonical env var
+// name for this manifest. For example, if EnvSchema declares
+// {Name: "GITHUB_PERSONAL_ACCESS_TOKEN", Aliases: ["GITHUB_TOKEN"]},
+// ResolveEnvKeys returns {"GITHUB_TOKEN": "GITHUB_PERSONAL_ACCESS_TOKEN"}.
+func (m *Manifest) ResolveEnvKeys() map[string]string {
+	mapping := map[string]string{}
+	for _, ev := range m.EnvSchema {
+		for _, alias := range ev.Aliases {
+			mapping[alias] = ev.Name
+		}
+	}
+	return mapping
 }

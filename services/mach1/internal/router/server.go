@@ -11,9 +11,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/framing"
+	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/metatools"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/proto"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/security"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/supervisor"
@@ -25,10 +27,11 @@ type Server struct {
 	in     *framing.Reader
 	out    *framing.Writer
 	sup    *supervisor.Supervisor
+	meta   *metatools.Registry
 }
 
 // New builds a Server.
-func New(r io.Reader, w io.Writer, sup *supervisor.Supervisor, logger *slog.Logger) *Server {
+func New(r io.Reader, w io.Writer, sup *supervisor.Supervisor, meta *metatools.Registry, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -37,6 +40,7 @@ func New(r io.Reader, w io.Writer, sup *supervisor.Supervisor, logger *slog.Logg
 		in:     framing.NewReader(r),
 		out:    framing.NewWriter(w),
 		sup:    sup,
+		meta:   meta,
 	}
 }
 
@@ -95,15 +99,24 @@ func (s *Server) Handle(ctx context.Context, msg *proto.Message) *proto.Message 
 func (s *Server) handleRequest(ctx context.Context, msg *proto.Message) *proto.Message {
 	switch msg.Method {
 	case "initialize":
-		return s.ok(msg.ID, proto.InitializeResult{
+		resp := s.ok(msg.ID, proto.InitializeResult{
 			ProtocolVersion: proto.ProtocolVersion,
-			ServerInfo:      proto.Implementation{Name: "mach1", Version: "0.1.0"},
+			ServerInfo:      proto.Implementation{Name: "mach1", Version: "0.3.4"},
 			Capabilities: proto.ServerCapabilities{
 				Tools: &proto.ToolsCapability{ListChanged: false},
 			},
 		})
+		// trigger background warmup of all enabled MCPs
+		if s.sup != nil {
+			go s.sup.BackgroundWarmup(ctx)
+		}
+		return resp
 	case "tools/list":
-		return s.ok(msg.ID, proto.ListToolsResult{Tools: s.sup.Tools()})
+		tools := s.sup.Tools()
+		if s.meta != nil {
+			tools = append(tools, s.meta.Tools()...)
+		}
+		return s.ok(msg.ID, proto.ListToolsResult{Tools: tools})
 	case "tools/call":
 		return s.handleToolsCall(ctx, msg)
 	case "mach1/rankTools":
@@ -119,6 +132,13 @@ func (s *Server) handleToolsCall(ctx context.Context, msg *proto.Message) *proto
 	var p proto.CallToolParams
 	if err := json.Unmarshal(msg.Params, &p); err != nil {
 		return s.err(msg.ID, proto.NewError(proto.ErrInvalidParams, "invalid tools/call params", err.Error()))
+	}
+	if strings.HasPrefix(p.Name, "mach1_") && s.meta != nil {
+		result, rpcErr := s.meta.Handle(ctx, p.Name, p.Arguments)
+		if rpcErr != nil {
+			return s.err(msg.ID, rpcErr)
+		}
+		return s.raw(msg.ID, result)
 	}
 	result, rpcErr := s.sup.Call(ctx, p.Name, p.Arguments)
 	if rpcErr != nil {

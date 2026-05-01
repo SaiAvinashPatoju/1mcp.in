@@ -20,46 +20,10 @@
     "reserved": 10000
   },
   "mcp": {
-    "github": {
+    "mach1": {
       "type": "local",
-      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
-      "environment": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_TOKEN}"
-      },
-      "enabled": true
-    },
-    "postgres": {
-      "type": "local",
-      "command": ["npx", "-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost:5432/1mcp"],
-      "enabled": true
-    },
-    "memory": {
-      "type": "local",
-      "command": ["npx", "-y", "@modelcontextprotocol/server-memory"],
-      "enabled": true
-    },
-    "knowledge-graph": {
-      "type": "local",
-      "command": ["npx", "-y", "@modelcontextprotocol/server-memory", "--file", "C:\\projects\\work\\1Mcp\\knowledge-graph.json"],
-      "enabled": true
-    },
-    "sequential-thinking": {
-      "type": "local",
-      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
-      "enabled": true
-    },
-    "brave-search": {
-      "type": "local",
-      "command": ["npx", "-y", "@modelcontextprotocol/server-brave-search"],
-      "environment": {
-        "BRAVE_API_KEY": "{env:BRAVE_API_KEY}"
-      },
-      "enabled": true
-    },
-    "retix": {
-      "type": "local",
-      "command": ["python", "C:\\projects\\work\\1Mcp\\retix-mcp.py"],
-      "description": "Local vision model for image analysis, OCR, and visual claim verification. Uses Ollama (cross-platform) with moondream or Qwen2.5-VL. Auto-pulls model on first use if not cached.",
+      "command": ["C:\\projects\\work\\1Mcp\\bin\\mach1.exe", "-config", "C:\\projects\\work\\1Mcp\\mach1-dev-config.json", "-log", "warn", "-catalog", "C:\\projects\\work\\1Mcp\\packages\\registry-index\\index.json"],
+      "description": "mach1 — the single MCP brain. Routes ALL upstream MCP calls (GitHub, Brave Search, Memory, Fetch, Sequential Thinking, Retix Vision, etc.) through one router. All tools are namespaced as <mcp_id>__<tool_name>. Also exposes mach1_* meta-tools for MCP lifecycle management.",
       "enabled": true
     }
   },

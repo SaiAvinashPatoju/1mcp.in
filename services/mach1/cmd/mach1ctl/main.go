@@ -103,8 +103,8 @@ func usage() {
   env set <id> NAME=VALUE
   env unset <id> NAME
   env list <id>
-	start [--transport http|stdio]
-  connect <vscode|cursor|claude|claudecode|windsurf|codex|opencode|antigravity>
+  start [--transport http|stdio]
+  connect <vscode|cursor|claude|claudecode|windsurf|codex|opencode|antigravity> [--transport stdio|http] [--url URL]
   disconnect <vscode|cursor|claude|claudecode|windsurf|codex|opencode|antigravity>
   doctor
 
@@ -365,17 +365,26 @@ func envSet(args []string) error {
 	if err != nil {
 		return fmt.Errorf("decode stored manifest: %w", err)
 	}
+
+	// Resolve aliases: if user passes an alias name, map it to the canonical name.
+	canonicalName := name
+	aliases := m.ResolveEnvKeys()
+	if resolved, ok := aliases[name]; ok {
+		canonicalName = resolved
+		fmt.Printf("resolved alias %s -> %s\n", name, canonicalName)
+	}
+
 	isSecret := false
 	known := false
 	for _, e := range m.EnvSchema {
-		if e.Name == name {
+		if e.Name == canonicalName {
 			known = true
 			isSecret = e.Secret
 			break
 		}
 	}
 	if !known {
-		fmt.Fprintf(os.Stderr, "note: %s is not declared in the manifest envSchema; storing as non-secret.\n", name)
+		fmt.Fprintf(os.Stderr, "note: %s is not declared in the manifest envSchema; storing as non-secret.\n", canonicalName)
 	}
 
 	if isSecret {
@@ -383,10 +392,10 @@ func envSet(args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := s.Set(id, name, value); err != nil {
+		if err := s.Set(id, canonicalName, value); err != nil {
 			return err
 		}
-		fmt.Printf("stored secret %s for %s (%s)\n", name, id, redact(value))
+		fmt.Printf("stored secret %s for %s (%s)\n", canonicalName, id, redact(value))
 		return nil
 	}
 
@@ -397,11 +406,11 @@ func envSet(args []string) error {
 	if entry.Env == nil {
 		entry.Env = map[string]string{}
 	}
-	entry.Env[name] = value
+	entry.Env[canonicalName] = value
 	if err := db.SetEnv(context.Background(), id, entry.Env); err != nil {
 		return err
 	}
-	fmt.Printf("set %s=%s for %s\n", name, value, id)
+	fmt.Printf("set %s=%s for %s\n", canonicalName, value, id)
 	return nil
 }
 
@@ -462,9 +471,80 @@ func envList(args []string) error {
 
 func runConnect(args []string) error {
 	if len(args) < 1 {
-		return errors.New("usage: mach1ctl connect <vscode|cursor|claude|claudecode|windsurf|codex|opencode|antigravity>")
+		return errors.New("usage: mach1ctl connect <vscode|cursor|claude|claudecode|windsurf|codex|opencode|antigravity> [--transport stdio|http] [--url URL]")
 	}
 	kind := clients.Kind(args[0])
+	transport := "stdio"
+	url := "http://127.0.0.1:3000/mcp"
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "--transport":
+			if i+1 >= len(args) {
+				return errors.New("--transport requires stdio or http")
+			}
+			transport = args[i+1]
+			i++
+		case "--url":
+			if i+1 >= len(args) {
+				return errors.New("--url requires a URL")
+			}
+			url = args[i+1]
+			i++
+		default:
+			return fmt.Errorf("unknown connect flag: %s", args[i])
+		}
+	}
+
+	if transport == "http" {
+		return connectHTTP(kind, url)
+	}
+	return connectStdio(kind)
+}
+
+func connectHTTP(kind clients.Kind, url string) error {
+	entry := clients.HTTPEntry{
+		URL:  url,
+		Type: "http",
+	}
+	switch kind {
+	case clients.OpenCode:
+		stdioEntry := clients.ServerEntry{
+			Type:    "remote",
+			Command: url,
+		}
+		path, backup, err := clients.ConnectTakeoverOpenCode(stdioEntry)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("connected mach1 (http) in %s\n", path)
+		if backup.BackedUpCount > 0 {
+			fmt.Printf("  backed up %d existing MCP(s) to %s\n", backup.BackedUpCount, backup.BackupPath)
+		}
+		return nil
+	case clients.Codex:
+		path, backup, err := clients.ConnectTakeoverHTTPCodex(url)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("connected mach1 (http) in %s\n", path)
+		if backup.BackedUpCount > 0 {
+			fmt.Printf("  backed up %d existing MCP(s) to %s\n", backup.BackedUpCount, backup.BackupPath)
+		}
+		return nil
+	default:
+		path, backup, err := clients.ConnectTakeoverHTTP(kind, entry)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("connected mach1 (http) in %s\n", path)
+		if backup.BackedUpCount > 0 {
+			fmt.Printf("  backed up %d existing MCP(s) to %s\n", backup.BackedUpCount, backup.BackupPath)
+		}
+		return nil
+	}
+}
+
+func connectStdio(kind clients.Kind) error {
 	exe, err := centralBinaryPath()
 	if err != nil {
 		return err
@@ -484,25 +564,34 @@ func runConnect(args []string) error {
 
 	switch kind {
 	case clients.OpenCode:
-		path, err := clients.ConnectOpenCode(entry)
+		path, backup, err := clients.ConnectTakeoverOpenCode(entry)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("registered mach1 in %s\n", path)
+		fmt.Printf("connected mach1 (stdio) in %s\n", path)
+		if backup.BackedUpCount > 0 {
+			fmt.Printf("  backed up %d existing MCP(s) to %s\n", backup.BackedUpCount, backup.BackupPath)
+		}
 		return nil
 	case clients.Codex:
-		path, err := clients.ConnectCodex(entry)
+		path, backup, err := clients.ConnectTakeoverCodex(entry)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("registered mach1 in %s\n", path)
+		fmt.Printf("connected mach1 (stdio) in %s\n", path)
+		if backup.BackedUpCount > 0 {
+			fmt.Printf("  backed up %d existing MCP(s) to %s\n", backup.BackedUpCount, backup.BackupPath)
+		}
 		return nil
 	default:
-		path, err := clients.Connect(kind, entry)
+		path, backup, err := clients.ConnectTakeover(kind, entry)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("registered mach1 in %s\n", path)
+		fmt.Printf("connected mach1 (stdio) in %s\n", path)
+		if backup.BackedUpCount > 0 {
+			fmt.Printf("  backed up %d existing MCP(s) to %s\n", backup.BackedUpCount, backup.BackupPath)
+		}
 		return nil
 	}
 }
@@ -512,30 +601,43 @@ func runDisconnect(args []string) error {
 		return errors.New("usage: mach1ctl disconnect <vscode|cursor|claude|claudecode|windsurf|codex|opencode|antigravity>")
 	}
 	kind := clients.Kind(args[0])
-	if kind == clients.Codex {
-		path, removed, err := clients.DisconnectCodex()
+
+	switch kind {
+	case clients.Codex:
+		path, restored, err := clients.DisconnectRestoreCodex()
 		if err != nil {
 			return err
 		}
-		if removed {
-			fmt.Printf("removed mach1 from %s\n", path)
+		if restored > 0 {
+			fmt.Printf("disconnected mach1 from %s and restored %d MCP(s)\n", path, restored)
 		} else {
-			fmt.Printf("no mach1 entry in %s\n", path)
+			fmt.Printf("disconnected mach1 from %s\n", path)
+		}
+		return nil
+	case clients.OpenCode:
+		path, restored, err := clients.DisconnectRestoreOpenCode()
+		if err != nil {
+			return err
+		}
+		if restored > 0 {
+			fmt.Printf("disconnected mach1 from %s and restored %d MCP(s)\n", path, restored)
+		} else {
+			fmt.Printf("disconnected mach1 from %s\n", path)
+		}
+		return nil
+	default:
+		path, restored, err := clients.DisconnectRestore(kind)
+		if err != nil {
+			return err
+		}
+		if restored > 0 {
+			fmt.Printf("disconnected mach1 from %s and restored %d MCP(s)\n", path, restored)
+		} else {
+			fmt.Printf("disconnected mach1 from %s\n", path)
 		}
 		return nil
 	}
-	path, removed, err := clients.Disconnect(kind)
-	if err != nil {
-		return err
-	}
-	if removed {
-		fmt.Printf("removed mach1 from %s\n", path)
-	} else {
-		fmt.Printf("no mach1 entry in %s\n", path)
-	}
-	return nil
 }
-
 // ----- doctor ----------------------------------------------------------------
 
 func runDoctor(_ []string) error {
