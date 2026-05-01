@@ -82,6 +82,10 @@ ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS entrypoint_command TEXT N
 ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS entrypoint_args TEXT NOT NULL DEFAULT '[]';
 `
 
+const marketplaceUpdatedAtMigration = `
+ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+`
+
 const usernameMigration = `
 ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT UNIQUE;
 `
@@ -162,6 +166,9 @@ func (d *DB) migrate(ctx context.Context) error {
 	}
 	if _, err := d.pool.Exec(ctx, marketplaceTrustMigration); err != nil {
 		return fmt.Errorf("clouddb: trust migrate: %w", err)
+	}
+	if _, err := d.pool.Exec(ctx, marketplaceUpdatedAtMigration); err != nil {
+		return fmt.Errorf("clouddb: updated_at migrate: %w", err)
 	}
 	if _, err := d.pool.Exec(ctx, usernameMigration); err != nil {
 		return fmt.Errorf("clouddb: username migrate: %w", err)
