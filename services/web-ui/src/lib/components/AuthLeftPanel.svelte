@@ -94,7 +94,10 @@
 
 	<!-- Install section -->
 	<div class="relative">
-		<p class="text-xs text-white/50 mb-2 font-medium">Quick Install</p>
+		<div class="flex items-center gap-2 mb-2">
+			<p class="text-xs text-white/50 font-medium">Quick Install</p>
+			<span class="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-500/70 border border-orange-500/10">v0.3.3</span>
+		</div>
 		<div class="flex gap-1 mb-2">
 			<button class="text-[11px] px-2.5 py-1 rounded {installTab === 'bash' ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50'}" on:click={() => installTab = 'bash'}>macOS/Linux</button>
 			<button class="text-[11px] px-2.5 py-1 rounded {installTab === 'pwsh' ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50'}" on:click={() => installTab = 'pwsh'}>Windows</button>
