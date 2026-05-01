@@ -1,56 +1,109 @@
 [
   {
+    "id": "airtable",
+    "name": "Airtable",
+    "version": "0.1.0",
+    "description": "Read, create, update, and delete Airtable bases, tables, and records.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/airtable",
+    "license": "MIT",
+    "tags": ["database", "spreadsheet", "airtable"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-airtable"]
+    },
+    "envSchema": [
+      { "name": "AIRTABLE_API_KEY", "label": "Airtable Personal Access Token", "secret": true, "required": true },
+      { "name": "AIRTABLE_BASE_ID", "label": "Airtable Base ID", "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "anthropic",
+    "name": "Anthropic API",
+    "version": "0.1.0",
+    "description": "Interact with Anthropic's Claude API for completions, messages, and embeddings.",
+    "homepage": "https://github.com/anthropics/anthropic-mcp",
+    "license": "MIT",
+    "tags": ["ai", "llm", "anthropic", "claude"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "ANTHROPIC_API_KEY", "label": "Anthropic API Key", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "asana",
+    "name": "Asana",
+    "version": "0.1.0",
+    "description": "Manage Asana projects, tasks, sections, and workspaces via the Asana API.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/asana",
+    "license": "MIT",
+    "tags": ["project-management", "tasks", "asana"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-asana"]
+    },
+    "envSchema": [
+      { "name": "ASANA_ACCESS_TOKEN", "label": "Asana Personal Access Token", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
     "id": "aws-kb-retrieval",
     "name": "AWS Knowledge Base",
     "version": "0.1.0",
     "description": "Query Amazon Bedrock Knowledge Bases using RAG for your enterprise documentation.",
     "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/aws-kb-retrieval-server",
     "license": "MIT",
-    "tags": [
-      "aws",
-      "bedrock",
-      "rag",
-      "enterprise"
-    ],
+    "tags": ["aws", "bedrock", "rag", "enterprise"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-aws-kb-retrieval"
-      ]
+      "args": ["-y", "@modelcontextprotocol/server-aws-kb-retrieval"]
     },
     "envSchema": [
-      {
-        "name": "AWS_ACCESS_KEY_ID",
-        "label": "AWS Access Key ID",
-        "secret": true,
-        "required": true
-      },
-      {
-        "name": "AWS_SECRET_ACCESS_KEY",
-        "label": "AWS Secret Access Key",
-        "secret": true,
-        "required": true
-      },
-      {
-        "name": "AWS_REGION",
-        "label": "AWS Region",
-        "required": true,
-        "default": "us-east-1"
-      },
-      {
-        "name": "AWS_KB_ID",
-        "label": "Knowledge Base ID",
-        "required": true
-      }
+      { "name": "AWS_ACCESS_KEY_ID", "label": "AWS Access Key ID", "secret": true, "required": true },
+      { "name": "AWS_SECRET_ACCESS_KEY", "label": "AWS Secret Access Key", "secret": true, "required": true },
+      { "name": "AWS_REGION", "label": "AWS Region", "required": true, "default": "us-east-1" },
+      { "name": "AWS_KB_ID", "label": "Knowledge Base ID", "required": true }
     ],
-    "permissions": {
-      "network": true
-    },
     "verification": "community",
     "sha256": "6fafae23258e6b0947f6716de371cf85ddcfa61a92240360133b8646d4c72cf0"
+  },
+  {
+    "id": "bitbucket",
+    "name": "Bitbucket",
+    "version": "0.1.0",
+    "description": "Access Bitbucket repositories, pull requests, branches, and pipelines.",
+    "homepage": "https://github.com/atlassian/bitbucket-mcp",
+    "license": "MIT",
+    "tags": ["git", "bitbucket", "vcs", "atlassian"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@atlassian/bitbucket-mcp"]
+    },
+    "envSchema": [
+      { "name": "BITBUCKET_USERNAME", "label": "Bitbucket Username", "required": true },
+      { "name": "BITBUCKET_APP_PASSWORD", "label": "Bitbucket App Password", "secret": true, "required": true },
+      { "name": "BITBUCKET_WORKSPACE", "label": "Bitbucket Workspace", "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   {
     "id": "brave-search",
@@ -59,59 +112,221 @@
     "description": "Web and local search using the Brave Search API. Supports web, image, news, and video search.",
     "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search",
     "license": "MIT",
-    "tags": [
-      "search",
-      "web",
-      "official"
-    ],
+    "tags": ["search", "web", "official"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-brave-search"
-      ]
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"]
     },
     "envSchema": [
-      {
-        "name": "BRAVE_API_KEY",
-        "label": "Brave Search API key",
-        "description": "Get a free API key at https://brave.com/search/api/",
-        "secret": true,
-        "required": true
-      }
+      { "name": "BRAVE_API_KEY", "label": "Brave Search API key", "description": "Get a free API key at https://brave.com/search/api/", "secret": true, "required": true }
     ],
-    "permissions": {
-      "network": true
-    },
     "verification": "anthropic-official",
     "sha256": "43b2a99ef8cada816dd36782be8e9762c9cd23e699ed5cc1c4d69949ec3a4471"
   },
   {
-    "id": "everything",
-    "name": "Everything (Test \u0026 Demo)",
-    "version": "0.6.2",
-    "description": "Reference/test server exposing prompts, resources, and tools. Useful for client testing and development.",
-    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/everything",
+    "id": "clickup",
+    "name": "ClickUp",
+    "version": "0.1.0",
+    "description": "Manage ClickUp tasks, docs, lists, folders, and spaces.",
+    "homepage": "https://github.com/clickup/clickup-mcp",
     "license": "MIT",
-    "tags": [
-      "test",
-      "demo",
-      "reference",
-      "official"
-    ],
+    "tags": ["project-management", "tasks", "clickup"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-everything"
-      ]
+      "args": ["-y", "@clickup/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "CLICKUP_API_KEY", "label": "ClickUp API Token", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "cloudflare",
+    "name": "Cloudflare",
+    "version": "0.1.0",
+    "description": "Manage Cloudflare zones, DNS records, Workers, KV, R2, and D1 databases.",
+    "homepage": "https://github.com/cloudflare/mcp-server-cloudflare",
+    "license": "MIT",
+    "tags": ["cloudflare", "dns", "workers", "cdn", "infrastructure"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@cloudflare/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "CLOUDFLARE_API_TOKEN", "label": "Cloudflare API Token", "description": "API token with Zone:Read, DNS:Edit, Workers:Write permissions", "secret": true, "required": true },
+      { "name": "CLOUDFLARE_ZONE_ID", "label": "Cloudflare Zone ID (optional)", "required": false }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "confluence",
+    "name": "Confluence",
+    "version": "0.1.0",
+    "description": "Search and read Confluence pages, spaces, and attachments. Write and update documentation.",
+    "homepage": "https://github.com/atlassian/confluence-mcp",
+    "license": "MIT",
+    "tags": ["docs", "wiki", "confluence", "atlassian"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@atlassian/confluence-mcp"]
+    },
+    "envSchema": [
+      { "name": "CONFLUENCE_BASE_URL", "label": "Confluence Base URL", "description": "e.g. https://your-domain.atlassian.net/wiki", "required": true },
+      { "name": "CONFLUENCE_API_TOKEN", "label": "Confluence API Token", "secret": true, "required": true },
+      { "name": "CONFLUENCE_USERNAME", "label": "Confluence Email/Username", "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "datadog",
+    "name": "Datadog",
+    "version": "0.1.0",
+    "description": "Query Datadog metrics, monitors, dashboards, logs, and incidents. Create and manage alerts.",
+    "homepage": "https://github.com/datadog/datadog-mcp",
+    "license": "Apache-2.0",
+    "tags": ["monitoring", "datadog", "observability", "infrastructure"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@datadog/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "DATADOG_API_KEY", "label": "Datadog API Key", "secret": true, "required": true },
+      { "name": "DATADOG_APP_KEY", "label": "Datadog Application Key", "secret": true, "required": true },
+      { "name": "DATADOG_SITE", "label": "Datadog Site", "required": true, "default": "datadoghq.com" }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "discord",
+    "name": "Discord",
+    "version": "0.1.0",
+    "description": "Send and read Discord messages, manage channels, and interact with Discord servers.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/discord",
+    "license": "MIT",
+    "tags": ["discord", "messaging", "communication"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-discord"]
+    },
+    "envSchema": [
+      { "name": "DISCORD_BOT_TOKEN", "label": "Discord Bot Token", "description": "Bot token from Discord Developer Portal", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "docker",
+    "name": "Docker",
+    "version": "0.1.0",
+    "description": "Manage Docker containers, images, volumes, networks, and Compose stacks.",
+    "homepage": "https://github.com/docker/docker-mcp",
+    "license": "Apache-2.0",
+    "tags": ["docker", "containers", "infrastructure"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@docker/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "DOCKER_HOST", "label": "Docker daemon socket", "description": "e.g. unix:///var/run/docker.sock", "default": "unix:///var/run/docker.sock" }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "elasticsearch",
+    "name": "Elasticsearch",
+    "version": "0.1.0",
+    "description": "Query and manage Elasticsearch indices, documents, and search queries.",
+    "homepage": "https://github.com/elastic/elasticsearch-mcp",
+    "license": "Apache-2.0",
+    "tags": ["search", "elasticsearch", "database", "analytics"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@elastic/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "ELASTICSEARCH_URL", "label": "Elasticsearch URL", "description": "e.g. https://localhost:9200", "required": true },
+      { "name": "ELASTICSEARCH_API_KEY", "label": "Elasticsearch API Key", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "elevenlabs",
+    "name": "ElevenLabs Text-to-Speech",
+    "version": "0.1.0",
+    "description": "Generate natural-sounding speech from text using ElevenLabs AI voices and sound effects.",
+    "homepage": "https://github.com/elevenlabs/elevenlabs-mcp",
+    "license": "MIT",
+    "tags": ["audio", "tts", "voice", "ai"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@elevenlabs/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "ELEVENLABS_API_KEY", "label": "ElevenLabs API Key", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "everything",
+    "name": "Everything (Test & Demo)",
+    "version": "0.6.2",
+    "description": "Reference/test server exposing prompts, resources, and tools. Useful for client testing and development.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/everything",
+    "license": "MIT",
+    "tags": ["test", "demo", "reference", "official"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-everything"]
     },
     "verification": "anthropic-official",
     "sha256": "fd5c1724bb7c62aaa6d2177ebfe15077f5088a70618682b323b48901ec36241a"
+  },
+  {
+    "id": "exa",
+    "name": "Exa Search",
+    "version": "0.1.0",
+    "description": "AI-powered web search using the Exa API. Finds relevant content via embeddings and semantic search.",
+    "homepage": "https://github.com/exa-labs/exa-mcp",
+    "license": "MIT",
+    "tags": ["search", "ai", "web", "embeddings"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@exa-labs/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "EXA_API_KEY", "label": "Exa API Key", "description": "Get a free API key at https://exa.ai", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   {
     "id": "fetch",
@@ -120,21 +335,12 @@
     "description": "Fetch URLs and convert HTML to markdown for agent consumption.",
     "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
     "license": "MIT",
-    "tags": [
-      "web",
-      "http",
-      "official"
-    ],
+    "tags": ["web", "http", "official"],
     "transport": "stdio",
     "runtime": "python",
     "entrypoint": {
       "command": "uvx",
-      "args": [
-        "mcp-server-fetch"
-      ]
-    },
-    "permissions": {
-      "network": true
+      "args": ["mcp-server-fetch"]
     },
     "verification": "anthropic-official",
     "sha256": "409dfc7bba34602d729b72f61700ca3c98159d6b04daf93fced8c699134050ce"
@@ -146,39 +352,16 @@
     "description": "Read, write, and search files within allow-listed directories. Official Anthropic MCP server.",
     "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
     "license": "MIT",
-    "tags": [
-      "files",
-      "io",
-      "official"
-    ],
+    "tags": ["files", "io", "official"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "${MACH1_FS_ROOT}"
-      ]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${MACH1_FS_ROOT}"]
     },
     "envSchema": [
-      {
-        "name": "MACH1_FS_ROOT",
-        "label": "Allowed root directory",
-        "description": "Absolute path the MCP is permitted to read/write.",
-        "required": true
-      }
+      { "name": "MACH1_FS_ROOT", "label": "Allowed root directory", "description": "Absolute path the MCP is permitted to read/write.", "required": true }
     ],
-    "permissions": {
-      "filesystem": {
-        "read": [
-          "${MACH1_FS_ROOT}"
-        ],
-        "write": [
-          "${MACH1_FS_ROOT}"
-        ]
-      }
-    },
     "verification": "anthropic-official",
     "sha256": "c0f6fe826f823b244623e3f2b13e4a744ba4ccae604957960b402f703fec1424"
   },
@@ -189,27 +372,15 @@
     "description": "Read-only git repository inspection: log, diff, blame, and status.",
     "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
     "license": "MIT",
-    "tags": [
-      "git",
-      "vcs",
-      "official"
-    ],
+    "tags": ["git", "vcs", "official"],
     "transport": "stdio",
     "runtime": "python",
     "entrypoint": {
       "command": "uvx",
-      "args": [
-        "mcp-server-git",
-        "--repository",
-        "${MACH1_GIT_REPO}"
-      ]
+      "args": ["mcp-server-git", "--repository", "${MACH1_GIT_REPO}"]
     },
     "envSchema": [
-      {
-        "name": "MACH1_GIT_REPO",
-        "label": "Repository path",
-        "required": true
-      }
+      { "name": "MACH1_GIT_REPO", "label": "Repository path", "required": true }
     ],
     "verification": "anthropic-official",
     "sha256": "c588b23498152e0bd24deb3076422244cd627a10c040aed7de2561168ae265e1"
@@ -221,35 +392,80 @@
     "description": "Search code, read issues/PRs, create issues and comments on GitHub via a personal access token.",
     "homepage": "https://github.com/github/github-mcp-server",
     "license": "MIT",
-    "tags": [
-      "github",
-      "vcs",
-      "code",
-      "official"
-    ],
+    "tags": ["github", "vcs", "code", "official"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-github"
-      ]
+      "args": ["-y", "@modelcontextprotocol/server-github"]
     },
     "envSchema": [
-      {
-        "name": "GITHUB_PERSONAL_ACCESS_TOKEN",
-        "label": "GitHub Personal Access Token",
-        "description": "Fine-grained PAT with the scopes you want the agent to have.",
-        "secret": true,
-        "required": true
-      }
+      { "name": "GITHUB_PERSONAL_ACCESS_TOKEN", "label": "GitHub Personal Access Token", "description": "Fine-grained PAT with the scopes you want the agent to have.", "secret": true, "required": true }
     ],
-    "permissions": {
-      "network": true
-    },
     "verification": "anthropic-official",
     "sha256": "e57c65bdd8dac8d11dd1556d2a9edbba8dfca97fa8e9921007dfb80aa291c559"
+  },
+  {
+    "id": "gitlab",
+    "name": "GitLab",
+    "version": "0.1.0",
+    "description": "Access GitLab projects, merge requests, pipelines, issues, and repository files.",
+    "homepage": "https://github.com/gitlab/gitlab-mcp",
+    "license": "MIT",
+    "tags": ["gitlab", "vcs", "ci-cd", "code"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@gitlab/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "GITLAB_PERSONAL_ACCESS_TOKEN", "label": "GitLab Personal Access Token", "secret": true, "required": true },
+      { "name": "GITLAB_URL", "label": "GitLab instance URL", "description": "Self-managed or gitlab.com", "default": "https://gitlab.com" }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "gmail",
+    "name": "Gmail",
+    "version": "0.1.0",
+    "description": "Read, search, compose, and send emails through the Gmail API.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/gmail",
+    "license": "MIT",
+    "tags": ["email", "gmail", "communication"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-gmail"]
+    },
+    "envSchema": [
+      { "name": "GMAIL_CREDENTIALS_PATH", "label": "Gmail OAuth credentials.json path", "description": "Path to the Google OAuth client credentials JSON", "required": true },
+      { "name": "GMAIL_TOKEN_PATH", "label": "Gmail token path (optional)", "description": "Path to store the OAuth token", "default": "./gmail-token.json" }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "google-calendar",
+    "name": "Google Calendar",
+    "version": "0.1.0",
+    "description": "Read, create, update, and delete Google Calendar events. Manage schedules and availability.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/google-calendar",
+    "license": "MIT",
+    "tags": ["calendar", "google", "productivity"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-google-calendar"]
+    },
+    "envSchema": [
+      { "name": "GOOGLE_CALENDAR_CREDENTIALS_PATH", "label": "Google OAuth credentials.json path", "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   {
     "id": "google-drive",
@@ -258,34 +474,97 @@
     "description": "Search, read, and create Google Drive documents, sheets, and files.",
     "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive",
     "license": "MIT",
-    "tags": [
-      "google",
-      "drive",
-      "docs",
-      "official"
-    ],
+    "tags": ["google", "drive", "docs", "official"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-gdrive"
-      ]
+      "args": ["-y", "@modelcontextprotocol/server-gdrive"]
     },
     "envSchema": [
-      {
-        "name": "GDRIVE_CREDENTIALS_PATH",
-        "label": "Google OAuth credentials.json path",
-        "description": "Path to credentials.json from Google Cloud Console",
-        "required": true
-      }
+      { "name": "GDRIVE_CREDENTIALS_PATH", "label": "Google OAuth credentials.json path", "description": "Path to credentials.json from Google Cloud Console", "required": true }
     ],
-    "permissions": {
-      "network": true
-    },
     "verification": "anthropic-official",
     "sha256": "dba23806e8cae4eb292ef37e973d03eb85fb13cbdb2033a2211ba37256757677"
+  },
+  {
+    "id": "google-maps",
+    "name": "Google Maps",
+    "version": "0.1.0",
+    "description": "Geocoding, place search, directions, distance matrix, and elevation data via Google Maps API.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/google-maps",
+    "license": "MIT",
+    "tags": ["maps", "geocoding", "google", "official"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-google-maps"]
+    },
+    "envSchema": [
+      { "name": "GOOGLE_MAPS_API_KEY", "label": "Google Maps API Key", "secret": true, "required": true }
+    ],
+    "verification": "anthropic-official",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "google-sheets",
+    "name": "Google Sheets",
+    "version": "0.1.0",
+    "description": "Read, write, and update Google Sheets spreadsheets, rows, and cells.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/google-sheets",
+    "license": "MIT",
+    "tags": ["sheets", "spreadsheet", "google"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-google-sheets"]
+    },
+    "envSchema": [
+      { "name": "GOOGLE_SHEETS_CREDENTIALS_PATH", "label": "Google Sheets OAuth credentials.json path", "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "hacker-news",
+    "name": "Hacker News",
+    "version": "0.1.0",
+    "description": "Browse Hacker News stories, comments, jobs, polls, and user profiles via the Firebase API.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/hacker-news",
+    "license": "MIT",
+    "tags": ["news", "hackernews", "social"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-hacker-news"]
+    },
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "jira",
+    "name": "Jira",
+    "version": "0.1.0",
+    "description": "Create, update, search, and transition Jira issues. Query projects, sprints, and boards.",
+    "homepage": "https://github.com/atlassian/jira-mcp",
+    "license": "MIT",
+    "tags": ["jira", "project-management", "issues", "atlassian"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@atlassian/jira-mcp"]
+    },
+    "envSchema": [
+      { "name": "JIRA_BASE_URL", "label": "Jira Base URL", "description": "e.g. https://your-domain.atlassian.net", "required": true },
+      { "name": "JIRA_USER_EMAIL", "label": "Jira User Email", "required": true },
+      { "name": "JIRA_API_TOKEN", "label": "Jira API Token", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   {
     "id": "linear",
@@ -294,32 +573,16 @@
     "description": "Create, update, and search Linear issues, cycles, and projects via the Linear API.",
     "homepage": "https://github.com/linear/linear",
     "license": "MIT",
-    "tags": [
-      "linear",
-      "project-management",
-      "issues"
-    ],
+    "tags": ["linear", "project-management", "issues"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@linear/mcp-server"
-      ]
+      "args": ["-y", "@linear/mcp-server"]
     },
     "envSchema": [
-      {
-        "name": "LINEAR_API_KEY",
-        "label": "Linear API Key",
-        "description": "Personal API key from Linear Settings â†’ API",
-        "secret": true,
-        "required": true
-      }
+      { "name": "LINEAR_API_KEY", "label": "Linear API Key", "description": "Personal API key from Linear Settings → API", "secret": true, "required": true }
     ],
-    "permissions": {
-      "network": true
-    },
     "verification": "community",
     "sha256": "2fd230c24158e98f839ea86523354d4069bdb0439d7108bfa377492e021aacaa"
   },
@@ -330,22 +593,55 @@
     "description": "Persistent knowledge graph the agent can query and update across turns.",
     "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
     "license": "MIT",
-    "tags": [
-      "memory",
-      "graph",
-      "official"
-    ],
+    "tags": ["memory", "graph", "official"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-memory"
-      ]
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
     },
     "verification": "anthropic-official",
     "sha256": "e43b26ec56f27f16cc593cecd5ded895f583efea81f9556fbe2a1eb64b69055f"
+  },
+  {
+    "id": "mongodb",
+    "name": "MongoDB",
+    "version": "0.1.0",
+    "description": "Query and manage MongoDB databases, collections, and documents. Run aggregations and CRUD operations.",
+    "homepage": "https://github.com/mongodb/mongodb-mcp",
+    "license": "Apache-2.0",
+    "tags": ["database", "mongodb", "nosql", "official"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-mongodb"]
+    },
+    "envSchema": [
+      { "name": "MONGODB_CONNECTION_STRING", "label": "MongoDB connection string", "description": "e.g. mongodb+srv://user:pass@cluster.mongodb.net/db", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "mysql",
+    "name": "MySQL",
+    "version": "0.1.0",
+    "description": "Query and manage MySQL databases with read-write access. Inspect schemas, run SQL, and manage tables.",
+    "homepage": "https://github.com/benborber/mcp-mysql",
+    "license": "MIT",
+    "tags": ["database", "mysql", "sql"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@benborber/mcp-mysql"]
+    },
+    "envSchema": [
+      { "name": "MYSQL_CONNECTION_STRING", "label": "MySQL connection string", "description": "e.g. mysql://user:pass@host:3306/db", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   {
     "id": "notion",
@@ -354,34 +650,78 @@
     "description": "Read and write Notion pages, databases, and blocks. Search across your entire workspace.",
     "homepage": "https://github.com/makenotion/notion-mcp-server",
     "license": "MIT",
-    "tags": [
-      "notion",
-      "docs",
-      "knowledge-base"
-    ],
+    "tags": ["notion", "docs", "knowledge-base"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@notionhq/notion-mcp-server"
-      ]
+      "args": ["-y", "@notionhq/notion-mcp-server"]
     },
     "envSchema": [
-      {
-        "name": "OPENAPI_MCP_HEADERS",
-        "label": "Notion Authorization Header",
-        "description": "JSON string: {\"Authorization\":\"Bearer ntn_xxx\",\"Notion-Version\":\"2022-06-28\"}",
-        "secret": true,
-        "required": true
-      }
+      { "name": "OPENAPI_MCP_HEADERS", "label": "Notion Authorization Header", "description": "JSON string: {\"Authorization\":\"Bearer ntn_xxx\",\"Notion-Version\":\"2022-06-28\"}", "secret": true, "required": true }
     ],
-    "permissions": {
-      "network": true
-    },
     "verification": "community",
     "sha256": "6f3a2c6b5a3a9ee8d9d1b928a21c6263d2302ad324c343b31872ef6f27ad7219"
+  },
+  {
+    "id": "obsidian",
+    "name": "Obsidian",
+    "version": "0.1.0",
+    "description": "Read, search, and create notes in an Obsidian vault. Query graph and manage markdown files.",
+    "homepage": "https://github.com/obsidianmd/obsidian-mcp",
+    "license": "MIT",
+    "tags": ["obsidian", "notes", "knowledge-base", "markdown"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@obsidianmd/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "OBSIDIAN_VAULT_PATH", "label": "Obsidian Vault Path", "description": "Absolute path to your Obsidian vault directory", "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "openai",
+    "name": "OpenAI",
+    "version": "0.1.0",
+    "description": "Access OpenAI models for completions, chat, embeddings, image generation, and audio transcription.",
+    "homepage": "https://github.com/openai/openai-mcp",
+    "license": "MIT",
+    "tags": ["ai", "llm", "openai", "gpt"],
+    "transport": "stdio",
+    "runtime": "python",
+    "entrypoint": {
+      "command": "uvx",
+      "args": ["openai-mcp-server"]
+    },
+    "envSchema": [
+      { "name": "OPENAI_API_KEY", "label": "OpenAI API Key", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "openweather",
+    "name": "OpenWeatherMap",
+    "version": "0.1.0",
+    "description": "Get current weather, forecasts, air quality, and historical weather data for any location.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/openweather",
+    "license": "MIT",
+    "tags": ["weather", "forecast", "environment"],
+    "transport": "stdio",
+    "runtime": "python",
+    "entrypoint": {
+      "command": "uvx",
+      "args": ["mcp-server-openweather"]
+    },
+    "envSchema": [
+      { "name": "OPENWEATHER_API_KEY", "label": "OpenWeatherMap API Key", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   {
     "id": "playwright",
@@ -390,23 +730,12 @@
     "description": "Full browser automation: navigate, click, fill forms, take screenshots, and scrape any web page.",
     "homepage": "https://github.com/microsoft/playwright-mcp",
     "license": "Apache-2.0",
-    "tags": [
-      "browser",
-      "automation",
-      "playwright",
-      "scraping"
-    ],
+    "tags": ["browser", "automation", "playwright", "scraping"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@playwright/mcp@latest"
-      ]
-    },
-    "permissions": {
-      "network": true
+      "args": ["-y", "@playwright/mcp@latest"]
     },
     "verification": "community",
     "sha256": "4774aa1a1253d9f9db2f5621b06cf5167bdc6bb15936b943124b6e862485c8bf"
@@ -418,34 +747,16 @@
     "description": "Query and inspect PostgreSQL databases with safe read-only access. Run SQL, inspect schemas, list tables.",
     "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres",
     "license": "MIT",
-    "tags": [
-      "database",
-      "postgres",
-      "sql",
-      "official"
-    ],
+    "tags": ["database", "postgres", "sql", "official"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-postgres",
-        "${POSTGRES_CONNECTION_STRING}"
-      ]
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "${POSTGRES_CONNECTION_STRING}"]
     },
     "envSchema": [
-      {
-        "name": "POSTGRES_CONNECTION_STRING",
-        "label": "PostgreSQL connection string",
-        "description": "e.g. postgresql://user:pass@host:5432/dbname",
-        "secret": true,
-        "required": true
-      }
+      { "name": "POSTGRES_CONNECTION_STRING", "label": "PostgreSQL connection string", "description": "e.g. postgresql://user:pass@host:5432/dbname", "secret": true, "required": true }
     ],
-    "permissions": {
-      "network": true
-    },
     "verification": "anthropic-official",
     "sha256": "32bc93f7c1c44dd0134364c9e86fdd1da15c19830a1d8a6474b44b715e18d7ad"
   },
@@ -456,26 +767,79 @@
     "description": "Headless Chrome browser automation: screenshot, PDF, scraping, and DOM interaction.",
     "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer",
     "license": "MIT",
-    "tags": [
-      "browser",
-      "automation",
-      "puppeteer",
-      "official"
-    ],
+    "tags": ["browser", "automation", "puppeteer", "official"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-puppeteer"
-      ]
-    },
-    "permissions": {
-      "network": true
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
     },
     "verification": "anthropic-official",
     "sha256": "7cd37d3f717f3f3c61a731b5c042d85b69a218319a10432aff6c47b821903440"
+  },
+  {
+    "id": "redis",
+    "name": "Redis",
+    "version": "0.1.0",
+    "description": "Query and manage Redis databases: get/set keys, manage lists, sets, sorted sets, hashes, and streams.",
+    "homepage": "https://github.com/redis/redis-mcp",
+    "license": "MIT",
+    "tags": ["redis", "cache", "database", "nosql"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@redis/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "REDIS_URL", "label": "Redis connection URL", "description": "e.g. redis://localhost:6379 or rediss://:password@host:6380/0", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "reddit",
+    "name": "Reddit",
+    "version": "0.1.0",
+    "description": "Read Reddit posts and comments, search subreddits, and fetch trending content.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/reddit",
+    "license": "MIT",
+    "tags": ["reddit", "social", "news"],
+    "transport": "stdio",
+    "runtime": "python",
+    "entrypoint": {
+      "command": "uvx",
+      "args": ["mcp-server-reddit"]
+    },
+    "envSchema": [
+      { "name": "REDDIT_CLIENT_ID", "label": "Reddit Client ID", "required": true },
+      { "name": "REDDIT_CLIENT_SECRET", "label": "Reddit Client Secret", "secret": true, "required": true },
+      { "name": "REDDIT_USER_AGENT", "label": "Reddit User Agent", "description": "e.g. mach1/1.0", "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "sentry",
+    "name": "Sentry",
+    "version": "0.1.0",
+    "description": "Query Sentry issues, events, performance traces, and releases. Create and manage error tracking.",
+    "homepage": "https://github.com/getsentry/sentry-mcp",
+    "license": "MIT",
+    "tags": ["sentry", "error-tracking", "monitoring"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@sentry/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "SENTRY_DSN", "label": "Sentry DSN", "description": "The DSN from your Sentry project settings", "secret": true, "required": true },
+      { "name": "SENTRY_AUTH_TOKEN", "label": "Sentry Auth Token", "description": "From Sentry → Settings → Developer Scopes", "secret": true, "required": true },
+      { "name": "SENTRY_ORG_SLUG", "label": "Sentry Organization Slug", "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   {
     "id": "sequential-thinking",
@@ -484,19 +848,12 @@
     "description": "Enables step-by-step reasoning via tool calls. Dramatically improves complex problem solving for any LLM.",
     "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking",
     "license": "MIT",
-    "tags": [
-      "reasoning",
-      "thinking",
-      "official"
-    ],
+    "tags": ["reasoning", "thinking", "official"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-sequential-thinking"
-      ]
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
     },
     "verification": "anthropic-official",
     "sha256": "8fc667f59aa7f1f1f0f3b25ee334b00b19235b53f61052fda403e1ad21a8bb2e"
@@ -508,38 +865,17 @@
     "description": "Read and send Slack messages, list channels, manage users, and create reactions.",
     "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/slack",
     "license": "MIT",
-    "tags": [
-      "slack",
-      "messaging",
-      "communication",
-      "official"
-    ],
+    "tags": ["slack", "messaging", "communication", "official"],
     "transport": "stdio",
     "runtime": "node",
     "entrypoint": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-slack"
-      ]
+      "args": ["-y", "@modelcontextprotocol/server-slack"]
     },
     "envSchema": [
-      {
-        "name": "SLACK_BOT_TOKEN",
-        "label": "Slack Bot Token",
-        "description": "Bot OAuth token starting with xoxb-",
-        "secret": true,
-        "required": true
-      },
-      {
-        "name": "SLACK_TEAM_ID",
-        "label": "Slack Team/Workspace ID",
-        "required": true
-      }
+      { "name": "SLACK_BOT_TOKEN", "label": "Slack Bot Token", "description": "Bot OAuth token starting with xoxb-", "secret": true, "required": true },
+      { "name": "SLACK_TEAM_ID", "label": "Slack Team/Workspace ID", "required": true }
     ],
-    "permissions": {
-      "network": true
-    },
     "verification": "anthropic-official",
     "sha256": "c1dea8dccd07a6c73bceee785001c99bf1cbf90461860f37b1cd3d9e893a0d15"
   },
@@ -550,64 +886,174 @@
     "description": "Query, inspect, and write to SQLite databases. Full read-write access to the configured DB file.",
     "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite",
     "license": "MIT",
-    "tags": [
-      "database",
-      "sqlite",
-      "sql",
-      "official"
-    ],
+    "tags": ["database", "sqlite", "sql", "official"],
     "transport": "stdio",
     "runtime": "python",
     "entrypoint": {
       "command": "uvx",
-      "args": [
-        "mcp-server-sqlite",
-        "--db-path",
-        "${SQLITE_DB_PATH}"
-      ]
+      "args": ["mcp-server-sqlite", "--db-path", "${SQLITE_DB_PATH}"]
     },
     "envSchema": [
-      {
-        "name": "SQLITE_DB_PATH",
-        "label": "SQLite database path",
-        "required": true
-      }
+      { "name": "SQLITE_DB_PATH", "label": "SQLite database path", "required": true }
     ],
     "verification": "anthropic-official",
     "sha256": "3e76ea86036502b82669daaa52bcc1146f4b52dd06787cadb5ef1e6877d647a5"
   },
   {
+    "id": "stripe",
+    "name": "Stripe",
+    "version": "0.1.0",
+    "description": "Manage Stripe payments, customers, subscriptions, invoices, products, and prices.",
+    "homepage": "https://github.com/stripe/stripe-mcp",
+    "license": "MIT",
+    "tags": ["stripe", "payments", "billing", "ecommerce"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@stripe/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "STRIPE_SECRET_KEY", "label": "Stripe Secret Key", "description": "Starts with sk_live_ or sk_test_", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "supabase",
+    "name": "Supabase",
+    "version": "0.1.0",
+    "description": "Manage Supabase projects, run SQL queries, manage auth, storage buckets, and edge functions.",
+    "homepage": "https://github.com/supabase/supabase-mcp",
+    "license": "Apache-2.0",
+    "tags": ["supabase", "database", "backend", "auth"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@supabase/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "SUPABASE_URL", "label": "Supabase Project URL", "description": "e.g. https://your-project.supabase.co", "required": true },
+      { "name": "SUPABASE_SERVICE_ROLE_KEY", "label": "Supabase Service Role Key", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "tavily",
+    "name": "Tavily Search",
+    "version": "0.1.0",
+    "description": "AI-optimized web search engine built for LLMs. Returns relevant content, summaries, and source metadata.",
+    "homepage": "https://github.com/tavily-ai/tavily-mcp",
+    "license": "MIT",
+    "tags": ["search", "ai", "web"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@tavily/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "TAVILY_API_KEY", "label": "Tavily API Key", "description": "Get a free API key at https://tavily.com", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
     "id": "time",
-    "name": "Time \u0026 World Clock",
+    "name": "Time & World Clock",
     "version": "0.6.2",
     "description": "Get current time, convert between timezones, and calculate time differences.",
     "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/time",
     "license": "MIT",
-    "tags": [
-      "time",
-      "timezone",
-      "utility",
-      "official"
-    ],
+    "tags": ["time", "timezone", "utility", "official"],
     "transport": "stdio",
     "runtime": "python",
     "entrypoint": {
       "command": "uvx",
-      "args": [
-        "mcp-server-time",
-        "--local-timezone",
-        "${LOCAL_TIMEZONE}"
-      ]
+      "args": ["mcp-server-time", "--local-timezone", "${LOCAL_TIMEZONE}"]
     },
     "envSchema": [
-      {
-        "name": "LOCAL_TIMEZONE",
-        "label": "Local timezone",
-        "description": "IANA timezone name, e.g. Asia/Kolkata",
-        "default": "UTC"
-      }
+      { "name": "LOCAL_TIMEZONE", "label": "Local timezone", "description": "IANA timezone name, e.g. Asia/Kolkata", "default": "UTC" }
     ],
     "verification": "anthropic-official",
     "sha256": "74399110c70f767f539251e7d2e195e3e74b491ac0c7e044f5afd5406f35dae5"
+  },
+  {
+    "id": "todoist",
+    "name": "Todoist",
+    "version": "0.1.0",
+    "description": "Manage Todoist tasks, projects, labels, and filters. Create, update, and complete tasks.",
+    "homepage": "https://github.com/todoist/todoist-mcp",
+    "license": "MIT",
+    "tags": ["todoist", "tasks", "productivity"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@todoist/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "TODOIST_API_TOKEN", "label": "Todoist API Token", "description": "From Todoist → Settings → Integrations", "secret": true, "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "twilio",
+    "name": "Twilio",
+    "version": "0.1.0",
+    "description": "Send SMS messages, make calls, manage Twilio phone numbers, and interact with Twilio Programmable Messaging.",
+    "homepage": "https://github.com/twilio/twilio-mcp",
+    "license": "MIT",
+    "tags": ["twilio", "sms", "phone", "communication"],
+    "transport": "stdio",
+    "runtime": "node",
+    "entrypoint": {
+      "command": "npx",
+      "args": ["-y", "@twilio/mcp-server"]
+    },
+    "envSchema": [
+      { "name": "TWILIO_ACCOUNT_SID", "label": "Twilio Account SID", "required": true },
+      { "name": "TWILIO_AUTH_TOKEN", "label": "Twilio Auth Token", "secret": true, "required": true },
+      { "name": "TWILIO_FROM_NUMBER", "label": "Twilio Phone Number", "description": "e.g. +1234567890", "required": true }
+    ],
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "wikipedia",
+    "name": "Wikipedia",
+    "version": "0.1.0",
+    "description": "Search Wikipedia, read article summaries, retrieve full content, and explore related pages.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/wikipedia",
+    "license": "MIT",
+    "tags": ["wikipedia", "reference", "knowledge", "official"],
+    "transport": "stdio",
+    "runtime": "python",
+    "entrypoint": {
+      "command": "uvx",
+      "args": ["mcp-server-wikipedia"]
+    },
+    "verification": "anthropic-official",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "id": "youtube-transcript",
+    "name": "YouTube Transcript",
+    "version": "0.1.0",
+    "description": "Fetch transcripts, captions, and metadata from YouTube videos for content analysis.",
+    "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/youtube-transcript",
+    "license": "MIT",
+    "tags": ["youtube", "transcript", "video"],
+    "transport": "stdio",
+    "runtime": "python",
+    "entrypoint": {
+      "command": "uvx",
+      "args": ["mcp-server-youtube-transcript"]
+    },
+    "verification": "community",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
   }
 ]

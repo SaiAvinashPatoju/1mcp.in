@@ -1,15 +1,16 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import { signIn, signInWithGitHub, authLoading, isAuthenticated, rememberMe } from '$lib/auth';
+	import { signUp, authLoading, isAuthenticated } from '$lib/auth';
 	import { toast } from '$lib/toast';
 	import AuthLeftPanel from '$lib/components/AuthLeftPanel.svelte';
 
+	let name = '';
 	let email = '';
 	let password = '';
+	let confirmPassword = '';
 	let showPassword = false;
 	let error = '';
-	let remember = true;
 
 	onMount(() => {
 		const unsub = isAuthenticated.subscribe((v) => {
@@ -20,67 +21,85 @@
 
 	async function handleSubmit() {
 		error = '';
+		if (!name.trim()) {
+			error = 'Name is required';
+			return;
+		}
 		if (!email.trim()) {
-			error = 'Email or username is required';
+			error = 'Email is required';
 			return;
 		}
 		if (!password) {
 			error = 'Password is required';
 			return;
 		}
-		try {
-			await signIn(email.trim(), password, remember);
-			goto('/dashboard');
-		} catch (e: any) {
-			error = e?.message ?? 'Login failed';
+		if (password.length < 8) {
+			error = 'Password must be at least 8 characters';
+			return;
 		}
-	}
-
-	async function handleGitHub() {
+		if (password !== confirmPassword) {
+			error = 'Passwords do not match';
+			return;
+		}
 		try {
-			await signInWithGitHub();
+			await signUp(name.trim(), email.trim(), password);
 			goto('/dashboard');
 		} catch (e: any) {
-			toast.error(e?.message ?? 'GitHub login failed');
+			error = e?.message ?? 'Sign up failed';
 		}
 	}
 </script>
 
 <svelte:head>
-	<title>1mcp.in — Login</title>
+	<title>1mcp.in — Sign Up</title>
 </svelte:head>
 
 <div class="min-h-screen bg-[#08080c] flex relative overflow-hidden">
 	<AuthLeftPanel />
 
-	<!-- RIGHT LOGIN SECTION -->
+	<!-- RIGHT SIGNUP SECTION -->
 	<div class="w-full lg:w-1/2 flex items-center justify-center p-6 relative z-10">
 		<div class="w-full max-w-[420px]">
 			<div class="bg-[#0f0f14]/80 border border-white/[0.06] rounded-2xl p-8 shadow-2xl backdrop-blur-xl">
-				<h2 class="text-xl font-bold text-white/95">Welcome back</h2>
-				<p class="text-sm text-white/35 mt-1">Login to continue to 1mcp.in</p>
+				<h2 class="text-xl font-bold text-white/95">Create your account</h2>
+				<p class="text-sm text-white/35 mt-1">Sign up to get started with 1mcp.in</p>
 
 				<form on:submit|preventDefault={handleSubmit} class="mt-6 space-y-4">
 					<div>
-						<label class="block text-xs font-medium text-white/40 mb-1.5" for="login-email">Email or Username</label>
+						<label class="block text-xs font-medium text-white/40 mb-1.5" for="signup-name">Name</label>
 						<div class="relative">
 							<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
 							<input
-								id="login-email"
+								id="signup-name"
 								type="text"
-								bind:value={email}
-								placeholder="you@example.com"
+								bind:value={name}
+								placeholder="Your full name"
 								class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-10 py-2.5 text-sm text-white/80 placeholder-white/15 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-colors"
 							/>
 						</div>
 					</div>
 
 					<div>
-						<label class="block text-xs font-medium text-white/40 mb-1.5" for="login-password">Password</label>
+						<label class="block text-xs font-medium text-white/40 mb-1.5" for="signup-email">Email</label>
+						<div class="relative">
+							<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+							<input
+								id="signup-email"
+								type="email"
+								bind:value={email}
+								placeholder="you@example.com"
+								required
+								class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-10 py-2.5 text-sm text-white/80 placeholder-white/15 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-colors"
+							/>
+						</div>
+					</div>
+
+					<div>
+						<label class="block text-xs font-medium text-white/40 mb-1.5" for="signup-password">Password</label>
 						<div class="relative">
 							<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
 							<input
-								id="login-password"
+								id="signup-password"
 								type={showPassword ? 'text' : 'password'}
 								bind:value={password}
 								placeholder="••••••••"
@@ -102,12 +121,20 @@
 						</div>
 					</div>
 
-					<div class="flex items-center justify-between">
-						<label class="flex items-center gap-2 cursor-pointer select-none">
-							<input type="checkbox" bind:checked={remember} class="w-3.5 h-3.5 rounded border border-white/[0.1] bg-black/40 accent-orange-500" />
-							<span class="text-xs text-white/40">Remember me</span>
-						</label>
-						<a href="/forgot-password" class="text-xs text-orange-500 hover:text-orange-400 transition-colors">Forgot password?</a>
+					<div>
+						<label class="block text-xs font-medium text-white/40 mb-1.5" for="signup-confirm">Confirm Password</label>
+						<div class="relative">
+							<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+							<input
+								id="signup-confirm"
+								type="password"
+								bind:value={confirmPassword}
+								placeholder="••••••••"
+								minlength="8"
+								required
+								class="w-full bg-black/40 border border-white/[0.06] rounded-lg px-10 py-2.5 text-sm text-white/80 placeholder-white/15 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-colors"
+							/>
+						</div>
 					</div>
 
 					{#if error}
@@ -122,35 +149,16 @@
 						{#if $authLoading}
 							<span class="flex items-center justify-center gap-2">
 								<span class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-								Signing in…
+								Creating account…
 							</span>
 						{:else}
-							Login
+							Sign Up
 						{/if}
 					</button>
 				</form>
 
-				<!-- Divider -->
-				<div class="relative my-6">
-					<div class="absolute inset-0 flex items-center">
-						<div class="w-full border-t border-white/[0.06]"></div>
-					</div>
-					<div class="relative flex justify-center text-xs">
-						<span class="px-3 bg-[#0f0f14] text-white/25">or</span>
-					</div>
-				</div>
-
-				<!-- GitHub button -->
-				<button
-					on:click={handleGitHub}
-					class="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] text-white/80 text-sm font-medium transition-all"
-				>
-					<svg class="w-5 h-5 text-white/60" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/></svg>
-					Continue with GitHub
-				</button>
-
 				<p class="text-center text-xs text-white/25 mt-5">
-					Don't have an account? <a href="/signup" class="text-orange-500 hover:text-orange-400 transition-colors">Sign up</a>
+					Already have an account? <a href="/" class="text-orange-500 hover:text-orange-400 transition-colors">Sign in</a>
 				</p>
 			</div>
 		</div>

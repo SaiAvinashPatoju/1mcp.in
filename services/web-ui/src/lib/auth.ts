@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { writable, derived } from 'svelte/store';
-import type { User } from './types';
+import type { User, RouterStatus } from './types';
 
 // Set VITE_API_URL in your .env to point at the deployed mcpapiserver.
 // Falls back to localhost for local development.
@@ -15,6 +15,7 @@ type AuthResult = {
 export const user = writable<User | null>(null);
 export const authLoading = writable(false);
 export const rememberMe = writable(true);
+export const routerStatus = writable<RouterStatus | null>(null);
 
 export const isAuthenticated = derived(user, ($u) => $u !== null);
 
@@ -236,4 +237,61 @@ export async function changePassword(currentPassword: string, newPassword: strin
 export function signOut(): void {
 	clearToken();
 	user.set(null);
+}
+
+export async function signInWithGitHub(): Promise<void> {
+	if (isTauri) {
+		const data = await invokeDesktop<AuthResult>('auth_github_login', {});
+		setToken(data.token, true);
+		user.set({ id: data.user.id, name: data.user.name, email: data.user.email });
+		return;
+	}
+	window.alert('GitHub login is only available in the desktop app.');
+}
+
+export async function forgotPassword(email: string): Promise<void> {
+	if (isTauri) {
+		await invokeDesktop<void>('auth_forgot_password', { email });
+		return;
+	}
+
+	const res = await fetch(`${API_URL}/api/auth/forgot-password`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ email })
+	});
+
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		throw new Error(data.error ?? `HTTP ${res.status}: Request failed`);
+	}
+}
+
+export async function getRouterStatus(): Promise<RouterStatus> {
+	try {
+		if (isTauri) {
+			const status = await invokeDesktop<RouterStatus>('get_router_status', {});
+			routerStatus.set(status);
+			return status;
+		}
+
+		const res = await fetch(`${API_URL}/api/router/status`);
+		if (!res.ok) {
+			throw new Error(`HTTP ${res.status}`);
+		}
+		const data = await res.json();
+		routerStatus.set(data);
+		return data;
+	} catch {
+		const fallback: RouterStatus = {
+			status: 'unknown',
+			version: 'v1.0.0',
+			transport: 'stdio',
+			uptime_seconds: 0,
+			port: 3200,
+			metrics_endpoint: ''
+		};
+		routerStatus.set(fallback);
+		return fallback;
+	}
 }

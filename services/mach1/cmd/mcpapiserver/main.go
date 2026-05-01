@@ -110,9 +110,11 @@ func main() {
 	mux.HandleFunc("DELETE /api/servers/{id}", handleServerUninstall(db))
 	mux.HandleFunc("POST /api/auth/register", handleRegister(db))
 	mux.HandleFunc("POST /api/auth/login", handleLogin(db))
+	mux.HandleFunc("POST /api/auth/forgot-password", handleForgotPassword(db))
 	mux.HandleFunc("GET /api/auth/me", handleMe(db))
 	mux.HandleFunc("PATCH /api/auth/me", handleUpdateProfile(db))
 	mux.HandleFunc("PATCH /api/auth/password", handleChangePassword(db))
+	registerGitHubOAuthHandlers(mux, db)
 	mux.HandleFunc("GET /api/settings", handleGetSettings())
 	mux.HandleFunc("POST /api/settings", handleSaveSettings())
 	mux.HandleFunc("GET /api/system/info", handleSystemInfo())
@@ -258,7 +260,7 @@ func handleRegister(db *clouddb.DB) http.HandlerFunc {
 
 		writeJSON(w, http.StatusCreated, map[string]any{
 			"token": token,
-			"user":  map[string]string{"id": id, "name": body.Name, "email": body.Email},
+			"user":  map[string]string{"id": id, "name": body.Name, "email": body.Email, "username": ""},
 		})
 	}
 }
@@ -283,9 +285,12 @@ func handleLogin(db *clouddb.DB) http.HandlerFunc {
 
 		u, err := db.FindUserByEmail(r.Context(), body.Email)
 		if err != nil {
-			// Don't leak whether the email exists.
-			writeJSON(w, http.StatusUnauthorized, errBody("invalid credentials"))
-			return
+			u, err = db.FindUserByUsername(r.Context(), body.Email)
+			if err != nil {
+				// Don't leak whether the email or username exists.
+				writeJSON(w, http.StatusUnauthorized, errBody("invalid credentials"))
+				return
+			}
 		}
 		if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(body.Password)); err != nil {
 			writeJSON(w, http.StatusUnauthorized, errBody("invalid credentials"))
@@ -301,7 +306,7 @@ func handleLogin(db *clouddb.DB) http.HandlerFunc {
 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"token": token,
-			"user":  map[string]string{"id": u.ID, "name": u.Name, "email": u.Email},
+			"user":  map[string]string{"id": u.ID, "name": u.Name, "email": u.Email, "username": u.Username},
 		})
 	}
 }
@@ -321,7 +326,7 @@ func handleMe(db *clouddb.DB) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"user": map[string]string{"id": u.ID, "name": u.Name, "email": u.Email},
+			"user": map[string]string{"id": u.ID, "name": u.Name, "email": u.Email, "username": u.Username},
 		})
 	}
 }
@@ -369,7 +374,7 @@ func handleUpdateProfile(db *clouddb.DB) http.HandlerFunc {
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
-			"user": map[string]string{"id": updated.ID, "name": updated.Name, "email": updated.Email},
+			"user": map[string]string{"id": updated.ID, "name": updated.Name, "email": updated.Email, "username": updated.Username},
 		})
 	}
 }
@@ -423,6 +428,26 @@ func handleChangePassword(db *clouddb.DB) http.HandlerFunc {
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	}
+}
+
+func handleForgotPassword(db *clouddb.DB) http.HandlerFunc {
+	type request struct {
+		Email string `json:"email"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body request
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, errBody("invalid request body"))
+			return
+		}
+		if body.Email == "" {
+			writeJSON(w, http.StatusBadRequest, errBody("email is required"))
+			return
+		}
+
+		slog.Info("password reset requested", "email", body.Email)
+		writeJSON(w, http.StatusOK, map[string]string{"message": "If this email is registered, a reset link has been sent."})
 	}
 }
 

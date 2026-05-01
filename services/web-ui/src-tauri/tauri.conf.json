@@ -1,6 +1,6 @@
 {
   "productName": "1mcp.in",
-  "version": "0.2.4",
+  "version": "0.3.2",
   "identifier": "in.mach1.hub",
   "build": {
     "frontendDist": "../build",
@@ -9,19 +9,22 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
-    "windows": [
-      {
-        "title": "1mcp.in",
-        "width": 1100,
-        "height": 720,
-        "resizable": true,
-        "fullscreen": false,
-        "decorations": true,
-        "transparent": false,
-        "minWidth": 800,
-        "minHeight": 600
-      }
-    ],
+      "windows": [
+        {
+          "title": "1mcp.in",
+          "width": 1100,
+          "height": 720,
+          "minWidth": 720,
+          "minHeight": 480,
+          "maxWidth": 3840,
+          "maxHeight": 2160,
+          "resizable": true,
+          "fullscreen": false,
+          "decorations": true,
+          "transparent": false,
+          "center": true
+        }
+      ],
     "security": {
       "csp": null
     }
@@ -37,7 +40,8 @@
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
-      "icons/icon.ico"
+      "icons/icon.ico",
+      "icons/icon.png"
     ],
     "windows": {
       "webviewInstallMode": {

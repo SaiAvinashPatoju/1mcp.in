@@ -1,64 +1,164 @@
-# Contributing MCPs to the 1mcp Marketplace
+# Contributing an MCP to the 1mcp.in Marketplace
 
-The marketplace grows through pull requests. Community submissions are never auto-approved or auto-verified: a maintainer reviews the MCP, tests it, signs the catalog digest, and merges it.
+Thank you for contributing to the 1mcp.in MCP registry! Every new MCP makes the platform more useful for every user.
 
-## Submission Flow
+## Prerequisites
 
-1. Fork the repository.
-2. Add one JSON object to `packages/registry-index/index.json`.
-3. Set `verification` to `community`.
-4. Leave `sha256` and `signature` empty. Maintainers fill these after review.
-5. Open a pull request with a short test note and links to the MCP source/package.
+- Your MCP server must be published and installable via `npx`, `uvx`, `pipx`, or a binary download
+- You must be the maintainer or have the maintainer's approval to submit
+- Your MCP must not contain malware, credential stealers, or any form of supply-chain attack
 
-CI validates manifest structure, duplicate IDs, and maintainer-pinned SHA256 values. A maintainer will run the MCP locally, inspect install behavior, check for suspicious code paths, then sign the entry with:
+## How to submit
+
+### 1. Fork the repository
 
 ```bash
-cd services/mach1
-go run ./cmd/mach1signregistry --catalog ../../packages/registry-index/index.json
+gh repo fork SaiAvinashPatoju/1mcp.in --clone
 ```
 
-## Manifest Template
+### 2. Create a manifest entry
+
+Add one JSON object to `packages/registry-index/index.json`. Insert it in alphabetical order by `id`.
+
+### 3. Manifest schema
+
+Every entry must conform to the JSON Schema at `packages/mcp-manifest/manifest.schema.json` and include these fields:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | Stable unique ID (`kebab-case`, lowercase). Used as tool name prefix in clients. |
+| `name` | string | yes | Human-readable name (max 80 chars). |
+| `version` | string | yes | Semver string (`X.Y.Z`). |
+| `description` | string | no | Short description of what this MCP does. |
+| `homepage` | string (uri) | no | Project homepage or repository. |
+| `license` | string | no | SPDX license identifier (e.g. MIT, Apache-2.0). |
+| `tags` | string[] | no | Up to 32 tags for filtering. |
+| `transport` | string | yes | One of: `stdio`, `sse`, `http`. |
+| `runtime` | string | yes | One of: `node`, `python`, `docker`, `binary`. |
+| `entrypoint` | object | yes | How to launch this MCP (see below). |
+| `envSchema` | array | no | Environment variables the user must configure. |
+| `permissions` | object | no | Declared permissions (network, filesystem). |
+| `verification` | string | no | Set to `"community"` for your submission. |
+
+### 4. Entrypoint formats
+
+**Node (npx):**
+```json
+"entrypoint": {
+  "command": "npx",
+  "args": ["-y", "@your-scope/mcp-server"]
+}
+```
+
+**Python (uvx):**
+```json
+"entrypoint": {
+  "command": "uvx",
+  "args": ["your-mcp-server"]
+}
+```
+
+**Docker:**
+```json
+"entrypoint": {
+  "image": "docker.io/your-image:mcp-latest",
+  "args": []
+}
+```
+
+**Binary:**
+```json
+"entrypoint": {
+  "command": "your-mcp-binary",
+  "args": ["--flag", "value"]
+}
+```
+
+### 5. Environment variables (envSchema)
+
+List every environment variable your MCP requires:
+
+```json
+"envSchema": [
+  {
+    "name": "MY_API_KEY",
+    "label": "My API Key",
+    "description": "Get one at https://example.com/settings/tokens",
+    "secret": true,
+    "required": true
+  },
+  {
+    "name": "MY_REGION",
+    "label": "Region",
+    "default": "us-east-1"
+  }
+]
+```
+
+- `secret: true` values are encrypted in the vault and never logged
+- The user is prompted for `required: true` env vars during installation
+
+### 6. Example entry
 
 ```json
 {
-  "id": "notion-enhanced",
-  "name": "Notion Enhanced",
+  "id": "my-service",
+  "name": "My Service",
   "version": "1.0.0",
-  "description": "Full Notion API coverage including databases, pages, and blocks.",
-  "homepage": "https://github.com/contributor/notion-enhanced-mcp",
+  "description": "Do something useful via the My Service API.",
+  "homepage": "https://github.com/you/my-service-mcp",
   "license": "MIT",
-  "tags": ["notion", "docs", "community"],
+  "tags": ["my-service", "utility"],
   "transport": "stdio",
   "runtime": "node",
   "entrypoint": {
     "command": "npx",
-    "args": ["-y", "notion-enhanced-mcp"]
+    "args": ["-y", "@your-scope/mcp-server"]
   },
   "envSchema": [
     {
-      "name": "NOTION_API_KEY",
-      "label": "Notion API Key",
+      "name": "MY_SERVICE_API_KEY",
+      "label": "My Service API Key",
       "secret": true,
       "required": true
     }
   ],
-  "permissions": { "network": true },
+  "permissions": {
+    "network": true
+  },
   "verification": "community",
-  "sha256": "",
-  "signature": ""
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
 }
 ```
 
-## Trust Labels
+### 7. Open a Pull Request
 
-- `anthropic-official`: official MCPs from the Model Context Protocol / Anthropic catalog.
-- `1mcp.in-verified`: reviewed and tested by 1mcp maintainers.
-- `community`: submitted by the community and signed only after maintainer review.
+Open a PR with your single-entry addition. The CI will:
 
-## Security Rules
+1. ✅ Validate the JSON Schema
+2. ✅ Check required fields are present
+3. ✅ Verify all IDs are unique and lowercase kebab-case
+4. ⏳ Flag the entry as `community` — requires maintainer review
 
-- Do not submit obfuscated install commands.
-- Do not request broad filesystem access unless the MCP genuinely needs it.
-- Declare secrets in `envSchema` with `"secret": true`.
-- Add `toolAnnotations` when known so admins can identify read-only, destructive, and idempotent tools.
-- Maintainers, not contributors, set verification upgrades and SHA256 values.
+### 8. Maintainer review
+
+A maintainer will:
+1. Download and test your MCP manually
+2. Scan for malicious patterns (network calls to unknown hosts, filesystem exfiltration, crypto miners)
+3. Compute the SHA256 hash of your canonical manifest
+4. Replace the placeholder hash with the computed hash
+5. Optionally sign the entry
+6. Approve and merge
+
+Once merged, your MCP will appear in the 1mcp.in marketplace on the next release build.
+
+## Do NOT
+
+- Submit entries with placeholder SHA256 hashes that contain malicious code
+- Submit entries that require elevated OS permissions (sudo, root access)
+- Submit entries that exfiltrate user data
+- Submit multiple entries in a single PR (one PR = one MCP)
+
+## Questions?
+
+Open a discussion at https://github.com/SaiAvinashPatoju/1mcp.in/discussions or join our community chat.

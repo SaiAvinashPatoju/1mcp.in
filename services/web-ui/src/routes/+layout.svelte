@@ -5,6 +5,7 @@
 	import { user, signOut, isAuthenticated, restoreSession } from '$lib/auth';
 	import UpdateBanner from '$lib/components/UpdateBanner.svelte';
 	import Toast from '$lib/components/Toast.svelte';
+	import ZoomManager from '$lib/components/ZoomManager.svelte';
 	import { browser } from '$app/environment';
 	import { onMount, afterUpdate, onDestroy } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
@@ -124,9 +125,8 @@
 {:else}
 	<div class="flex h-screen bg-[#0a0a0f] overflow-hidden">
 		<!-- Sidebar -->
-		<nav class="w-52 flex flex-col border-r border-white/[0.04] bg-[#0a0a0f] flex-shrink-0">
-			<div class="flex items-center gap-2.5 px-4 py-5 border-b border-white/[0.04]">
-				<div class="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center flex-shrink-0 text-[11px] font-black text-white">1M</div>
+		<nav class="sidebar flex flex-col border-r border-white/[0.04] bg-[#0a0a0f] flex-shrink-0">
+			<div class="flex items-center px-4 py-5 border-b border-white/[0.04]">
 				<span class="text-sm font-bold text-white/90">1mcp.in</span>
 			</div>
 
@@ -239,4 +239,5 @@
 	</div>
 	{#if isTauri}<UpdateBanner />{/if}
 	<Toast />
+	<ZoomManager />
 {/if}

@@ -10,6 +10,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_shell::ShellExt;
 
 const DAEMON_PORT: u16 = 3200;
 
@@ -291,6 +292,112 @@ async fn auth_change_password(
 
     if !response.status().is_success() {
         return Err(decode_api_error(response, "Password update failed").await);
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn auth_github_login(app: tauri::AppHandle) -> Result<AuthResponse, String> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|e| format!("Failed to bind TCP listener: {e}"))?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    let redirect_uri = format!("http://127.0.0.1:{}/callback", port);
+
+    let client = cloud_client()?;
+    let url_res = client
+        .get(format!("{}/api/auth/github/url", cloud_api_url()))
+        .query(&[("redirect_uri", &redirect_uri)])
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !url_res.status().is_success() {
+        return Err(decode_api_error(url_res, "Failed to get GitHub auth URL").await);
+    }
+
+    let url_body = url_res
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))?;
+    let url = url_body
+        .get("url")
+        .and_then(|v| v.as_str())
+        .ok_or("Missing auth URL in response")?;
+
+    app.shell()
+        .open(url, None)
+        .map_err(|e| format!("Failed to open browser: {e}"))?;
+
+    let (mut stream, _) = listener
+        .accept()
+        .await
+        .map_err(|e| format!("Failed to accept connection: {e}"))?;
+
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    let mut reader = BufReader::new(&mut stream);
+    let mut request_line = String::new();
+    reader
+        .read_line(&mut request_line)
+        .await
+        .map_err(|e| format!("Failed to read request: {e}"))?;
+
+    let code = request_line
+        .split(' ')
+        .nth(1)
+        .and_then(|path| path.split('?').nth(1))
+        .and_then(|query| {
+            query.split('&').find_map(|pair| {
+                let mut parts = pair.split('=');
+                if parts.next()? == "code" {
+                    parts.next().map(|v| v.to_string())
+                } else {
+                    None
+                }
+            })
+        })
+        .ok_or("Missing code in callback")?;
+
+    let response_html = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<html><body style=\"background:#08080c;color:#fff;font-family:system-ui;text-align:center;padding-top:40vh;\"><h2 style=\"color:#f97316;\">Authentication Successful</h2><p>You can close this window and return to 1mcp.in.</p></body></html>";
+    stream
+        .write_all(response_html.as_bytes())
+        .await
+        .map_err(|e| format!("Failed to write response: {e}"))?;
+    drop(stream);
+
+    let exchange_res = client
+        .post(format!("{}/api/auth/github/exchange", cloud_api_url()))
+        .json(&serde_json::json!({
+            "code": code,
+            "redirect_uri": redirect_uri,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !exchange_res.status().is_success() {
+        return Err(decode_api_error(exchange_res, "GitHub token exchange failed").await);
+    }
+
+    exchange_res
+        .json::<AuthResponse>()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+async fn auth_forgot_password(email: String) -> Result<(), String> {
+    let client = cloud_client()?;
+    let response = client
+        .post(format!("{}/api/auth/forgot-password", cloud_api_url()))
+        .json(&serde_json::json!({ "email": email }))
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(decode_api_error(response, "Failed to send reset link").await);
     }
 
     Ok(())
@@ -1218,6 +1325,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),
@@ -1263,6 +1371,8 @@ pub fn run() {
             auth_me,
             auth_update_profile,
             auth_change_password,
+            auth_github_login,
+            auth_forgot_password,
             fetch_cloud_stats,
             fetch_cloud_marketplace,
             fetch_cloud_skills,

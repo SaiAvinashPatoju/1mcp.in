@@ -13,6 +13,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,6 +25,7 @@ const schema = `
 CREATE TABLE IF NOT EXISTS users (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email         TEXT UNIQUE NOT NULL,
+    username      TEXT UNIQUE,
     name          TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -79,6 +82,10 @@ ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS entrypoint_command TEXT N
 ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS entrypoint_args TEXT NOT NULL DEFAULT '[]';
 `
 
+const usernameMigration = `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT UNIQUE;
+`
+
 // MarketplaceItem is a row in marketplace_items. Tags is a JSON array string.
 type MarketplaceItem struct {
 	ID           string     `json:"id"`
@@ -116,6 +123,7 @@ type User struct {
 	ID           string
 	Name         string
 	Email        string
+	Username     string
 	PasswordHash string
 	CreatedAt    time.Time
 }
@@ -155,27 +163,46 @@ func (d *DB) migrate(ctx context.Context) error {
 	if _, err := d.pool.Exec(ctx, marketplaceTrustMigration); err != nil {
 		return fmt.Errorf("clouddb: trust migrate: %w", err)
 	}
+	if _, err := d.pool.Exec(ctx, usernameMigration); err != nil {
+		return fmt.Errorf("clouddb: username migrate: %w", err)
+	}
 	return nil
 }
 
 // RegisterUser inserts a new user and returns the generated UUID.
 // Returns an error containing "already registered" if the email is taken.
+// Auto-generates a username from the email prefix.
 func (d *DB) RegisterUser(ctx context.Context, email, name, passwordHash string) (string, error) {
-	var id string
-	err := d.pool.QueryRow(ctx,
-		`INSERT INTO users (email, name, password_hash)
-		 VALUES ($1, $2, $3)
-		 ON CONFLICT (email) DO NOTHING
-		 RETURNING id`,
-		email, name, passwordHash,
-	).Scan(&id)
-	if err != nil {
-		return "", fmt.Errorf("clouddb: register user: %w", err)
+	baseUsername := strings.Split(email, "@")[0]
+
+	for attempt := 0; attempt < 10; attempt++ {
+		username := baseUsername
+		if attempt > 0 {
+			n, _ := rand.Int(rand.Reader, big.NewInt(10000))
+			username = fmt.Sprintf("%s%04d", baseUsername, n.Int64())
+		}
+
+		var id string
+		err := d.pool.QueryRow(ctx,
+			`INSERT INTO users (email, name, password_hash, username)
+			 VALUES ($1, $2, $3, $4)
+			 ON CONFLICT (email) DO NOTHING
+			 RETURNING id`,
+			email, name, passwordHash, username,
+		).Scan(&id)
+		if err != nil {
+			errStr := err.Error()
+			if strings.Contains(errStr, "users_username_key") || strings.Contains(errStr, "duplicate key") {
+				continue
+			}
+			return "", fmt.Errorf("clouddb: register user: %w", err)
+		}
+		if id == "" {
+			return "", fmt.Errorf("clouddb: email already registered")
+		}
+		return id, nil
 	}
-	if id == "" {
-		return "", fmt.Errorf("clouddb: email already registered")
-	}
-	return id, nil
+	return "", fmt.Errorf("clouddb: could not generate unique username")
 }
 
 // FindUserByEmail looks up a user by email. Returns an error wrapping
@@ -183,12 +210,27 @@ func (d *DB) RegisterUser(ctx context.Context, email, name, passwordHash string)
 func (d *DB) FindUserByEmail(ctx context.Context, email string) (*User, error) {
 	u := &User{}
 	err := d.pool.QueryRow(ctx,
-		`SELECT id, name, email, password_hash, created_at
+		`SELECT id, name, email, username, password_hash, created_at
 		 FROM users WHERE email = $1`,
 		email,
-	).Scan(&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.CreatedAt)
+	).Scan(&u.ID, &u.Name, &u.Email, &u.Username, &u.PasswordHash, &u.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("clouddb: find user: %w", err)
+	}
+	return u, nil
+}
+
+// FindUserByUsername looks up a user by username. Returns an error wrapping
+// pgx.ErrNoRows if not found.
+func (d *DB) FindUserByUsername(ctx context.Context, username string) (*User, error) {
+	u := &User{}
+	err := d.pool.QueryRow(ctx,
+		`SELECT id, name, email, username, password_hash, created_at
+		 FROM users WHERE username = $1`,
+		username,
+	).Scan(&u.ID, &u.Name, &u.Email, &u.Username, &u.PasswordHash, &u.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("clouddb: find user by username: %w", err)
 	}
 	return u, nil
 }
@@ -216,12 +258,12 @@ func (d *DB) CreateSession(ctx context.Context, userID string) (string, error) {
 func (d *DB) ValidateSession(ctx context.Context, token string) (*User, error) {
 	u := &User{}
 	err := d.pool.QueryRow(ctx,
-		`SELECT u.id, u.name, u.email, u.password_hash, u.created_at
+		`SELECT u.id, u.name, u.email, u.username, u.password_hash, u.created_at
 		 FROM user_sessions s
 		 JOIN users u ON u.id = s.user_id
 		 WHERE s.token = $1 AND s.expires_at > now()`,
 		sessionTokenHash(token),
-	).Scan(&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.CreatedAt)
+	).Scan(&u.ID, &u.Name, &u.Email, &u.Username, &u.PasswordHash, &u.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("clouddb: validate session: %w", err)
 	}
@@ -353,9 +395,9 @@ func (d *DB) UpdateUserProfile(ctx context.Context, userID, name, email string) 
 		`UPDATE users
 		 SET name = $2, email = $3
 		 WHERE id = $1
-		 RETURNING id, name, email, password_hash, created_at`,
+		 RETURNING id, name, email, username, password_hash, created_at`,
 		userID, name, email,
-	).Scan(&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.CreatedAt)
+	).Scan(&u.ID, &u.Name, &u.Email, &u.Username, &u.PasswordHash, &u.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("clouddb: update user profile: %w", err)
 	}

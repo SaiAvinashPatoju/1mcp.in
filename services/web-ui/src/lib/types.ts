@@ -104,7 +104,7 @@ export interface ClientConfigPreview {
 }
 
 export interface RouterStatus {
-	status: 'running' | 'stopped' | 'error';
+	status: string;
 	version: string;
 	transport: string;
 	uptime_seconds: number;

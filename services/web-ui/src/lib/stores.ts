@@ -732,6 +732,9 @@ export const mcpServers = writable<McpServerDetail[]>([]);
 export const isConsoleExpanded = writable(false);
 export const consoleTab = writable<'output' | 'problems' | 'debug'>('output');
 
+// ── Zoom Level ──
+export const zoomLevel = writable(1.0);
+
 // ── Dashboard API ──
 
 export async function fetchRouterStatus() {
