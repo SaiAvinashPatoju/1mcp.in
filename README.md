@@ -79,7 +79,7 @@ To add an MCP to the marketplace, see [CONTRIBUTING_MCP.md](CONTRIBUTING_MCP.md)
 
 ## Team Pro
 
-Shared MCP configuration across your team, credential vaulting, admin approval gates, activity logs, custom agents, and usage dashboards. 5-50 seats at ₹1,999/seat/month.
+Shared MCP configuration across your team, credential vaulting, admin approval gates, activity logs, custom agents, and usage dashboards.
 
 [1mcp.in/team](https://1mcp.in/team) — waitlist open.
 

@@ -42,8 +42,8 @@
 		if (client.connected) {
 			return { label: 'CONNECTED', class: 'text-emerald-400', dot: 'bg-emerald-500' };
 		}
-		if (client.id === 'claude' || client.id === 'claudecode') {
-			return { label: 'NOT CONNECTED', class: 'text-orange-400', dot: 'bg-orange-500' };
+		if (client.id === 'claude' || client.id === 'claudecode' || client.id === 'codex') {
+			return { label: 'MANUAL ONLY', class: 'text-amber-500', dot: 'bg-amber-500' };
 		}
 		return { label: 'DISCONNECTED', class: 'text-white/30', dot: 'bg-white/20' };
 	}
@@ -233,6 +233,17 @@
 				</div>
 			</div>
 
+			<!-- Scrolling banner for unsupported clients -->
+			{#if ['claude', 'claudecode', 'codex'].includes($selectedClientId ?? '')}
+				<div class="overflow-hidden rounded-xl bg-amber-900/10 border border-amber-600/20">
+					<div class="animate-marquee whitespace-nowrap py-3 text-xs text-amber-400/80 font-medium">
+						⚠️ &nbsp; Claude Desktop, Claude Code, and Codex do not support auto-setup. &nbsp; Please copy the mach1 config and connect manually. &nbsp; See docs: &nbsp;
+						<a href="https://github.com/SaiAvinashPatoju/1mcp.in" target="_blank" rel="noopener noreferrer" class="underline hover:text-amber-300">github.com/SaiAvinashPatoju/1mcp.in</a>
+						&nbsp; ⚠️ &nbsp; • &nbsp;
+					</div>
+				</div>
+			{/if}
+
 			<!-- Table -->
 			<div class="rounded-xl bg-white/[0.02] border border-white/[0.06] overflow-hidden">
 				<table class="w-full text-left">
@@ -311,6 +322,17 @@
 											>
 												Disconnect
 											</button>
+										{:else if client.id === 'claude' || client.id === 'claudecode' || client.id === 'codex'}
+											<a
+												href="https://github.com/SaiAvinashPatoju/1mcp.in"
+												target="_blank"
+												rel="noopener noreferrer"
+												class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/[0.03] border border-white/[0.06] text-[11px] text-amber-400/70 hover:text-amber-300 hover:bg-white/[0.06] transition-colors"
+												title="View docs for manual setup"
+											>
+												<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+												Docs
+											</a>
 										{:else}
 											<button
 												on:click|stopPropagation={() => handleSetup(client.id)}
@@ -427,15 +449,27 @@
 				<!-- Setup & Config -->
 				<div class="rounded-lg bg-white/[0.02] border border-white/[0.06] p-4 space-y-3">
 					<h4 class="text-xs font-medium text-white/70">Setup & Config</h4>
-					<div class="rounded-md bg-orange-500/5 border border-orange-500/10 p-3 space-y-1.5">
-						<div class="flex items-center gap-1.5 text-[11px] text-orange-400/80">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-							<span class="font-medium">mach1 is in control</span>
+					{#if ['claude', 'claudecode', 'codex'].includes($selectedClientId ?? '')}
+						<div class="rounded-md bg-amber-900/10 border border-amber-600/20 p-3 space-y-1.5">
+							<div class="flex items-center gap-1.5 text-[11px] text-amber-400/80">
+								<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+								<span class="font-medium">Manual setup required</span>
+							</div>
+							<p class="text-[10px] text-white/30 leading-relaxed">
+								Auto-setup is not supported for this client. Please copy the mach1 MCP config and add it to your client's MCP configuration manually. See <a href="https://github.com/SaiAvinashPatoju/1mcp.in" target="_blank" rel="noopener noreferrer" class="underline hover:text-amber-300">docs</a>.
+							</p>
 						</div>
-						<p class="text-[10px] text-white/30 leading-relaxed">
-							All MCPs have been replaced with mach1. Your original MCP config was backed up and will be restored when you disconnect.
-						</p>
-					</div>
+					{:else}
+						<div class="rounded-md bg-orange-500/5 border border-orange-500/10 p-3 space-y-1.5">
+							<div class="flex items-center gap-1.5 text-[11px] text-orange-400/80">
+								<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+								<span class="font-medium">mach1 is in control</span>
+							</div>
+							<p class="text-[10px] text-white/30 leading-relaxed">
+								All MCPs have been replaced with mach1. Your original MCP config was backed up and will be restored when you disconnect.
+							</p>
+						</div>
+					{/if}
 					<button on:click={() => toast.info('Config editing available in desktop app')} class="w-full flex items-center justify-between py-2 px-3 rounded-md bg-white/[0.03] border border-white/[0.06] text-xs text-white/60 hover:text-white/90 hover:bg-white/[0.06] transition-colors">
 						<span>Open Config File</span>
 						<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
@@ -458,6 +492,11 @@
 							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
 							Disconnect
 						</button>
+					{:else if ['claude', 'claudecode', 'codex'].includes($clientDetail.id)}
+						<div class="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-amber-900/10 border border-amber-600/20 text-xs text-amber-400/80">
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+							Manual Setup Only
+						</div>
 					{:else}
 						<button on:click={() => handleSetup($clientDetail.id)} disabled={actionLoading} class="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-500 text-white text-xs font-medium hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
 							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -469,3 +508,14 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	@keyframes marquee {
+		0% { transform: translateX(100%); }
+		100% { transform: translateX(-100%); }
+	}
+	.animate-marquee {
+		display: inline-block;
+		animation: marquee 20s linear infinite;
+	}
+</style>

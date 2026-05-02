@@ -9,16 +9,21 @@
 		skills,
 		installSkill,
 		uninstallSkill,
+		bundles,
+		installBundle,
+		uninstallBundle,
 		fetchMarketplace,
 		fetchInstalled,
+		fetchBundles,
 		selectedMarketplaceItem,
 		marketplaceItemDetail,
-		selectMarketplaceItem
+		selectMarketplaceItem,
+		setMcpEnv
 	} from '$lib/stores';
 	import { user } from '$lib/auth';
 	import PublishModal from '$lib/components/PublishModal.svelte';
 
-	type Tab = 'mcps' | 'skills';
+	type Tab = 'mcps' | 'skills' | 'bundles';
 	type SortOption = 'downloads' | 'rating' | 'newest';
 	type TrustFilter = 'all' | 'anthropic-official' | '1mcp-verified' | 'community';
 	type RuntimeFilter = 'all' | 'node' | 'python' | 'go' | 'binary';
@@ -32,12 +37,14 @@
 	let statusFilter: StatusFilter = 'all';
 	let showPublish = false;
 	let actionLoading = false;
+	let apiKeyInputs: Record<string, string> = {};
 	let currentPage = 1;
 	const pageSize = 8;
 
 	onMount(async () => {
 		await fetchInstalled();
 		await fetchMarketplace();
+		await fetchBundles();
 	});
 
 	function fmt(n: number): string {
@@ -175,7 +182,7 @@
 
 <div class="flex h-full">
 	<!-- Main Content -->
-	<div class="flex-1 flex flex-col min-w-0" class:pr-80={$selectedMarketplaceItem}>
+	<div class="flex-1 flex flex-col min-w-0" class:pr-96={$selectedMarketplaceItem}>
 		<div class="p-6 space-y-5">
 			<!-- Header -->
 			<div class="flex items-start justify-between">
@@ -222,6 +229,15 @@
 				>
 					Skills
 					{#if activeTab === 'skills'}
+						<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500 rounded-t-full"></div>
+					{/if}
+				</button>
+				<button
+					on:click={() => activeTab = 'bundles'}
+					class="px-4 py-2 text-sm transition-colors relative {activeTab === 'bundles' ? 'text-orange-400 font-medium' : 'text-white/30 hover:text-white/60'}"
+				>
+					Bundles
+					{#if activeTab === 'bundles'}
 						<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500 rounded-t-full"></div>
 					{/if}
 				</button>
@@ -401,12 +417,45 @@
 					</div>
 				{/if}
 			{/if}
+
+			<!-- Bundles Tab -->
+			{#if activeTab === 'bundles'}
+				{#if $bundles.length === 0}
+					<div class="flex flex-col items-center justify-center py-24 gap-3">
+						<p class="text-sm font-medium text-white/80">No bundles found</p>
+						<p class="text-xs text-white/30">Bundles are collections of MCPs that work together.</p>
+					</div>
+				{:else}
+					<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+						{#each $bundles as bundle (bundle.id)}
+							<div class="rounded-xl border border-white/[0.06] bg-white/[0.03] p-5 flex flex-col gap-3 hover:border-white/[0.12] transition-all">
+								<div class="flex items-center gap-2">
+									<span class="text-lg">📦</span>
+									<h3 class="text-sm font-semibold text-white/90">{bundle.name}</h3>
+								</div>
+								<p class="text-xs text-white/40 leading-relaxed flex-1">{bundle.description}</p>
+								<div class="text-[10px] text-white/30">v{bundle.version}</div>
+								<div class="flex flex-wrap gap-1">
+									{#each bundle.mcp_ids as mcpId}
+										<span class="text-[10px] px-2 py-0.5 rounded bg-white/[0.04] text-white/40 border border-white/[0.06]">{mcpId}</span>
+									{/each}
+								</div>
+								{#if bundle.installed}
+									<button on:click={() => uninstallBundle(bundle.id)} disabled={actionLoading} class="w-full text-xs py-1.5 px-3 rounded-lg border border-white/[0.06] text-white/40 hover:text-red-400 hover:border-red-900/60 hover:bg-red-900/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Uninstall</button>
+								{:else}
+									<button on:click={() => installBundle(bundle.id)} disabled={actionLoading} class="w-full text-xs py-1.5 px-3 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed">Install Bundle</button>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
+			{/if}
 		</div>
 	</div>
 
 	<!-- Detail Panel -->
 	{#if $selectedMarketplaceItem && $marketplaceItemDetail}
-		<div class="w-80 border-l border-white/[0.06] bg-[#0a0a0f] flex flex-col fixed right-0 top-0 bottom-0 z-40 overflow-y-auto">
+		<div class="w-96 border-l border-white/[0.06] bg-[#0a0a0f] flex flex-col fixed right-0 top-0 bottom-0 z-40 overflow-y-auto">
 			<div class="p-5 space-y-5">
 				<!-- Header -->
 				<div class="flex items-start justify-between">
@@ -524,7 +573,38 @@
 					{/each}
 				</div>
 
-				<!-- Actions -->
+				<!-- API Key / Auth -->
+				{#if $marketplaceItemDetail.installed && $marketplaceItemDetail.requires_env.length > 0}
+					<div class="rounded-lg bg-white/[0.02] border border-white/[0.06] p-4 space-y-3">
+						<h4 class="text-xs font-medium text-white/70">Authentication</h4>
+						{#each $marketplaceItemDetail.requires_env as envKey}
+							<div class="flex gap-2">
+								<input
+									value={apiKeyInputs[envKey] ?? ''}
+									on:input={(e) => { apiKeyInputs[envKey] = (e.target as HTMLInputElement).value; }}
+									placeholder={`Enter ${envKey}...`}
+									type="password"
+									class="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-1.5 text-xs text-white/80 placeholder-white/20 focus:outline-none focus:border-orange-500/30"
+								/>
+								<button
+									on:click={async () => {
+										const val = apiKeyInputs[envKey];
+										if (val) {
+											await setMcpEnv($marketplaceItemDetail.id, { [envKey]: val });
+											toast.success(`${envKey} saved`);
+											apiKeyInputs[envKey] = '';
+										}
+									}}
+									class="px-3 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-400 hover:bg-orange-500/20 transition-colors"
+								>
+									Save
+								</button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+			<!-- Actions -->
 				<div class="space-y-2">
 					{#if $marketplaceItemDetail.installed}
 						<button on:click={() => handleUninstall($marketplaceItemDetail.id)} disabled={actionLoading} class="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">

@@ -63,6 +63,9 @@ vite-dev.out.log
 test-results/
 playwright-report/
 
+# 1mcp local data directory
+/1mcp data/
+
 # Team Pro (private)
 team/
 

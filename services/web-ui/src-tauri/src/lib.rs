@@ -1146,12 +1146,19 @@ struct ClientConfigPreviewResponse {
 
 #[tauri::command]
 fn get_client_detail(app: tauri::AppHandle, id: String) -> Result<ClientConnectionDetailResponse, String> {
-    let target = resolve_client_target(&app, &id)?;
-    let connected = if matches!(target.kind, ClientConfigKind::CodexToml) {
-        codex_has_mach1(&target.path)
+    let is_unsupported = id == "claude" || id == "claudecode" || id == "codex";
+
+    let (connected, config_path) = if is_unsupported {
+        (false, None)
     } else {
-        let json = read_json_config(&target.path);
-        client_has_mach1(&target, &json)
+        match resolve_client_target(&app, &id) {
+            Ok(target) => {
+                let json = read_json_config(&target.path);
+                let conn = client_has_mach1(&target, &json);
+                (conn, Some(target.path.to_string_lossy().to_string()))
+            }
+            Err(_) => (false, None),
+        }
     };
 
     let client_names: std::collections::HashMap<&str, (&str, &str)> = [
@@ -1173,7 +1180,7 @@ fn get_client_detail(app: tauri::AppHandle, id: String) -> Result<ClientConnecti
         subtitle: subtitle.to_string(),
         status: if connected { "connected".to_string() } else { "not_connected".to_string() },
         transport: if id == "claude" || id == "claudecode" { "file".to_string() } else { "stdio".to_string() },
-        config_path: target.path.to_string_lossy().to_string(),
+        config_path: config_path.unwrap_or_else(|| "—".to_string()),
         last_handshake: if connected { "2m ago".to_string() } else { "—".to_string() },
         router_binding: "mach1 (local)".to_string(),
         process_id: if connected { "12874".to_string() } else { "—".to_string() },
@@ -1193,6 +1200,13 @@ fn get_client_routing_health(_id: String) -> Result<ClientRoutingHealthResponse,
 
 #[tauri::command]
 fn get_client_config_preview(app: tauri::AppHandle, id: String) -> Result<ClientConfigPreviewResponse, String> {
+    let is_unsupported = id == "claude" || id == "claudecode" || id == "codex";
+    if is_unsupported {
+        return Ok(ClientConfigPreviewResponse {
+            path: "—".to_string(),
+            content: "Auto-setup not supported for this client. Configure manually.".to_string(),
+        });
+    }
     let target = resolve_client_target(&app, &id)?;
     let content = if target.path.exists() {
         std::fs::read_to_string(&target.path).unwrap_or_else(|_| "{}".to_string())
@@ -1457,28 +1471,22 @@ fn resolve_client_target(
             path: home_dir.join(".cursor").join("mcp.json"),
             kind: ClientConfigKind::McpServers,
         },
-        "claude" => ClientConfigTarget {
-            path: config_dir.join("Claude").join("claude_desktop_config.json"),
-            kind: ClientConfigKind::ClaudeStdio,
-        },
-        "claudecode" => ClientConfigTarget {
-            path: home_dir.join(".claude.json"),
-            kind: ClientConfigKind::McpServers,
-        },
+        "claude" | "claudecode" | "codex" => {
+            return Err(format!(
+                "Automated setup for '{}' is not yet supported. Please add the mach1 server config manually.",
+                client_id
+            ))
+        }
         "windsurf" => ClientConfigTarget {
-            path: home_dir.join(".codeium").join("mcp_config.json"),
+            path: home_dir.join(".codeium").join("windsurf").join("mcp_config.json"),
             kind: ClientConfigKind::McpServers,
-        },
-        "codex" => ClientConfigTarget {
-            path: home_dir.join(".codex").join("config.toml"),
-            kind: ClientConfigKind::CodexToml,
         },
         "opencode" => ClientConfigTarget {
             path: home_dir.join(".config").join("opencode").join("opencode.json"),
             kind: ClientConfigKind::Opencode,
         },
         "antigravity" => ClientConfigTarget {
-            path: home_dir.join(".antigravity").join("mcp.json"),
+            path: home_dir.join(".gemini").join("antigravity").join("mcp_config.json"),
             kind: ClientConfigKind::McpServers,
         },
         _ => {
@@ -1603,6 +1611,13 @@ fn patch_client_config(
 ) -> Result<String, String> {
     use std::fs;
 
+    // Ensure mach1 daemon is running before configuring client
+    if !state.daemon.is_running() {
+        if let Err(e) = state.daemon.start(DAEMON_PORT) {
+            eprintln!("warning: failed to auto-start mach1 daemon: {e}");
+        }
+    }
+
     let target = resolve_client_target(&app, &client_id)?;
 
     if !target.path.exists() {
@@ -1664,7 +1679,6 @@ fn patch_client_config(
             "url".to_string(),
             toml::Value::String(format!("{}/mcp", daemon_url)),
         );
-        mach1_table.insert("type".to_string(), toml::Value::String("http".to_string()));
         mach1_table.insert(
             "bearer_token_env_var".to_string(),
             toml::Value::String("MACH1_HTTP_TOKEN".to_string()),
@@ -1699,6 +1713,11 @@ fn patch_client_config(
     });
 
     let windsurf_entry = serde_json::json!({
+        "serverUrl": format!("{}/mcp", daemon_url),
+        "headers": headers.clone()
+    });
+
+    let antigravity_entry = serde_json::json!({
         "serverUrl": format!("{}/mcp", daemon_url),
         "headers": headers.clone()
     });
@@ -1738,6 +1757,7 @@ fn patch_client_config(
             let entry = match client_id.as_str() {
                 "cursor" => cursor_entry,
                 "windsurf" => windsurf_entry,
+                "antigravity" => antigravity_entry,
                 _ => http_entry,
             };
             if let Some(obj) = json.as_object_mut() {
@@ -1781,6 +1801,14 @@ fn patch_client_config(
     )
     .map_err(|e| e.to_string())?;
 
+    // Inject 1MCP system directive into client's rule file
+    inject_rules(&app, &client_id);
+
+    // For VSCode, also inject instructions reference into user settings.json
+    if client_id == "vscode" {
+        patch_vscode_settings(&app);
+    }
+
     Ok(target.path.to_string_lossy().to_string())
 }
 
@@ -1809,6 +1837,10 @@ fn remove_client_config(app: tauri::AppHandle, client_id: String) -> Result<bool
         }
 
         std::fs::write(&target.path, doc.to_string()).map_err(|e| e.to_string())?;
+        remove_rules(&app, &client_id);
+        if client_id == "vscode" {
+            unpatch_vscode_settings(&app);
+        }
         return Ok(true);
     }
 
@@ -1847,6 +1879,11 @@ fn remove_client_config(app: tauri::AppHandle, client_id: String) -> Result<bool
         serde_json::to_string_pretty(&json).unwrap_or_default(),
     )
     .map_err(|e| e.to_string())?;
+
+    remove_rules(&app, &client_id);
+    if client_id == "vscode" {
+        unpatch_vscode_settings(&app);
+    }
 
     Ok(true)
 }
@@ -1953,4 +1990,173 @@ fn ensure_router_binary(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     }
 
     Err("mach1 binary was not bundled with the app. Reinstall 1mcp.in or configure the client manually.".to_string())
+}
+
+fn find_cli_binary(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let cli_name = if cfg!(target_os = "windows") { "mach1ctl.exe" } else { "mach1ctl" };
+
+    let mut candidates = Vec::new();
+
+    // Check resources subdirectory (where all Go binaries are bundled)
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        candidates.push(resource_dir.join("resources").join(cli_name));
+    }
+    if let Some(exe_path) = std::env::current_exe().ok() {
+        if let Some(parent) = exe_path.parent() {
+            candidates.push(parent.join("resources").join(cli_name));
+        }
+    }
+
+    // Windows: check beside the binary itself (NSIS installs resources at exe level)
+    if cfg!(target_os = "windows") {
+        if let Some(exe_path) = std::env::current_exe().ok() {
+            if let Some(parent) = exe_path.parent() {
+                candidates.push(parent.join(cli_name));
+            }
+        }
+    }
+
+    // Dev fallback — relative to CWD
+    if let Ok(current_dir) = std::env::current_dir() {
+        candidates.push(current_dir.join("../../bin").join(cli_name));
+        candidates.push(current_dir.join("../../../bin").join(cli_name));
+    }
+
+    for candidate in &candidates {
+        if candidate.exists() {
+            return Ok(candidate.clone());
+        }
+    }
+
+    Err("mach1ctl binary not found".to_string())
+}
+
+fn inject_rules(app: &tauri::AppHandle, client_id: &str) {
+    let cli_path = match find_cli_binary(app) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("inject_rules: {e}");
+            return;
+        }
+    };
+
+    let output = std::process::Command::new(&cli_path)
+        .arg("inject-rules")
+        .arg(client_id)
+        .output();
+
+    match output {
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                eprintln!("inject_rules failed (exit={:?}): {stdout}{stderr}", out.status.code());
+            }
+        }
+        Err(e) => {
+            eprintln!("inject_rules: cannot spawn {cli_path:?}: {e}");
+        }
+    }
+}
+
+fn remove_rules(app: &tauri::AppHandle, client_id: &str) {
+    let cli_path = match find_cli_binary(app) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("remove_rules: {e}");
+            return;
+        }
+    };
+
+    let output = std::process::Command::new(&cli_path)
+        .arg("remove-rules")
+        .arg(client_id)
+        .output();
+
+    match output {
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                eprintln!("remove_rules failed (exit={:?}): {stdout}{stderr}", out.status.code());
+            }
+        }
+        Err(e) => {
+            eprintln!("remove_rules: cannot spawn {cli_path:?}: {e}");
+        }
+    }
+}
+
+fn vscode_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let config_dir = app
+        .path()
+        .config_dir()
+        .map_err(|_| "Failed to resolve config directory".to_string())?;
+    Ok(config_dir.join("Code").join("User").join("settings.json"))
+}
+
+fn vscode_instructions_path(app: &tauri::AppHandle) -> PathBuf {
+    let home = app.path().home_dir().unwrap_or_else(|_| PathBuf::from("."));
+    home.join(".copilot").join("instructions").join("copilot-instructions.md")
+}
+
+fn patch_vscode_settings(app: &tauri::AppHandle) {
+    let settings_path = match vscode_settings_path(app) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("patch_vscode_settings: {e}");
+            return;
+        }
+    };
+
+    let ins_path = vscode_instructions_path(app);
+    let ins_path_str = ins_path.to_string_lossy().to_string();
+
+    let mut settings: serde_json::Value = std::fs::read_to_string(&settings_path)
+        .ok()
+        .and_then(|c| serde_json::from_str(&c).ok())
+        .unwrap_or(serde_json::json!({}));
+
+    let instruction_entry = serde_json::json!({"file": ins_path_str});
+
+    if let Some(obj) = settings.as_object_mut() {
+        obj.insert(
+            "github.copilot.chat.codeGeneration.instructions".to_string(),
+            serde_json::json!([instruction_entry]),
+        );
+    }
+
+    if let Some(parent) = settings_path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            eprintln!("patch_vscode_settings: create dir: {e}");
+            return;
+        }
+    }
+
+    if let Err(e) = std::fs::write(&settings_path, serde_json::to_string_pretty(&settings).unwrap_or_default()) {
+        eprintln!("patch_vscode_settings: write: {e}");
+    }
+}
+
+fn unpatch_vscode_settings(app: &tauri::AppHandle) {
+    let settings_path = match vscode_settings_path(app) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("unpatch_vscode_settings: {e}");
+            return;
+        }
+    };
+
+    let mut settings: serde_json::Value = std::fs::read_to_string(&settings_path)
+        .ok()
+        .and_then(|c| serde_json::from_str(&c).ok())
+        .unwrap_or(serde_json::json!({}));
+
+    if let Some(obj) = settings.as_object_mut() {
+        obj.remove("github.copilot.chat.codeGeneration.instructions");
+    }
+
+    if let Err(e) = std::fs::write(&settings_path, serde_json::to_string_pretty(&settings).unwrap_or_default()) {
+        eprintln!("unpatch_vscode_settings: write: {e}");
+    }
 }

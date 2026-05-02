@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mach1": {
+      "serverUrl": "http://127.0.0.1:9099/mcp",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      }
+    }
+  }
+}
+
+// Path: ~/.codeium/windsurf/mcp_config.json

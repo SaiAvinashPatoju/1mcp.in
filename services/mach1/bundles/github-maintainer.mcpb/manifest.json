@@ -1,0 +1,94 @@
+{
+  "id": "github-maintainer",
+  "version": "1.0.0",
+  "name": "Autonomous Repo Maintainer",
+  "description": "End-to-end repository lifecycle management. Triages issues, reviews PRs for security, and merges if clean.",
+  "category": "developer-tools",
+  "author": {
+    "name": "1mcp",
+    "url": "https://1mcp.in"
+  },
+  "license": "Apache-2.0",
+  "execution_mode": "hybrid",
+  "tools": [
+    { "server": "github", "tool": "list_issues", "required": true, "annotations": { "readOnly": true } },
+    { "server": "github", "tool": "get_issue", "required": true, "annotations": { "readOnly": true } },
+    { "server": "github", "tool": "create_branch", "required": true, "annotations": { "destructive": false } },
+    { "server": "github", "tool": "get_pull_request", "required": true, "annotations": { "readOnly": true } },
+    { "server": "github", "tool": "get_ci_status", "required": true, "annotations": { "readOnly": true } },
+    { "server": "github", "tool": "create_review", "required": true, "annotations": { "destructive": false } },
+    { "server": "github", "tool": "merge_pull_request", "required": true, "annotations": { "destructive": true } },
+    { "server": "github", "tool": "delete_branch", "required": false, "annotations": { "destructive": true } }
+  ],
+  "skills": [
+    {
+      "name": "skill_review_and_merge",
+      "file": "skills/review_and_merge.md",
+      "mode": "prompt",
+      "description": "Reviews and merges a GitHub PR following security best practices.",
+      "arguments": [
+        { "name": "pr_number", "description": "The PR number to review", "required": true },
+        { "name": "owner", "description": "Repository owner", "required": true },
+        { "name": "repo", "description": "Repository name", "required": true }
+      ]
+    },
+    {
+      "name": "skill_triage_and_fix",
+      "file": "skills/triage_and_fix.md",
+      "mode": "prompt",
+      "description": "Triages open issues and creates fix branches with context.",
+      "arguments": [
+        { "name": "owner", "description": "Repository owner", "required": true },
+        { "name": "repo", "description": "Repository name", "required": true }
+      ]
+    },
+    {
+      "name": "skill_security_audit",
+      "file": "skills/security_audit.md",
+      "mode": "prompt",
+      "description": "Performs a security audit on a repository's codebase.",
+      "arguments": [
+        { "name": "owner", "description": "Repository owner", "required": true },
+        { "name": "repo", "description": "Repository name", "required": true }
+      ]
+    }
+  ],
+  "macros": [
+    {
+      "name": "1mcp_triage_and_fix",
+      "description": "Automatically pulls issue context, creates fix branches for open unassigned issues.",
+      "handler": "HandleTriageAndFix",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "owner": { "type": "string", "description": "Repository owner" },
+          "repo": { "type": "string", "description": "Repository name" },
+          "max_issues": { "type": "integer", "description": "Max issues to triage (default 5)" }
+        },
+        "required": ["owner", "repo"]
+      },
+      "timeout_seconds": 120,
+      "step_timeout_seconds": 30,
+      "max_retries": 2
+    },
+    {
+      "name": "1mcp_review_and_merge",
+      "description": "Reviews a PR for security issues (secret scanning, CI check) and merges if clean.",
+      "handler": "HandleReviewAndMerge",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "owner": { "type": "string", "description": "Repository owner" },
+          "repo": { "type": "string", "description": "Repository name" },
+          "pr_number": { "type": "integer", "description": "Pull request number" },
+          "merge_strategy": { "type": "string", "enum": ["merge", "squash", "rebase"], "description": "Merge strategy (default: squash)" }
+        },
+        "required": ["owner", "repo", "pr_number"]
+      },
+      "timeout_seconds": 180,
+      "step_timeout_seconds": 30,
+      "max_retries": 2,
+      "approval_required": true
+    }
+  ]
+}

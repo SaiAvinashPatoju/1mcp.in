@@ -120,7 +120,7 @@ func ConnectTakeoverOpenCode(entry ServerEntry) (path string, backup BackupResul
 	if err != nil {
 		return "", backup, err
 	}
-	root, err := readJSONObject(path)
+	root, err := readJSONCObject(path)
 	if err != nil {
 		return "", backup, err
 	}
@@ -401,7 +401,7 @@ func DisconnectRestoreOpenCode() (path string, restored int, err error) {
 		return path, 0, nil
 	}
 
-	root, err := readJSONObject(path)
+	root, err := readJSONCObject(path)
 	if err != nil {
 		return path, 0, err
 	}
@@ -572,6 +572,75 @@ func Disconnect(kind Kind) (path string, removed bool, err error) {
 	return path, true, nil
 }
 
+// ---------------------------------------------------------------------------
+// Combined config + rules injection
+// ---------------------------------------------------------------------------
+
+// ConnectTakeoverWithRules performs ConnectTakeover and then injects the 1MCP
+// system directive into the client's rule file (if supported).
+// projectDir is optional - if empty, it attempts to find the project root.
+func ConnectTakeoverWithRules(kind Kind, entry ServerEntry, projectDir string) (*TakeoverWithRulesResult, error) {
+	result := &TakeoverWithRulesResult{}
+
+	// Step 1: Config takeover
+	var cfgPath string
+	var backup BackupResult
+	var err error
+
+	switch kind {
+	case OpenCode:
+		cfgPath, backup, err = ConnectTakeoverOpenCode(entry)
+	case Codex:
+		cfgPath, backup, err = ConnectTakeoverCodex(entry)
+	default:
+		cfgPath, backup, err = ConnectTakeover(kind, entry)
+	}
+
+	if err != nil {
+		return result, fmt.Errorf("config takeover: %w", err)
+	}
+
+	result.ConfigPath = cfgPath
+	result.Backup = backup
+
+	// Step 2: Find project directory if not provided
+	if projectDir == "" {
+		projectDir, err = FindProjectRoot("")
+		if err != nil {
+			// Non-fatal: rules injection is optional
+			return result, nil
+		}
+	}
+	result.ProjectDir = projectDir
+
+	// Step 3: Inject rules
+	rulesResult, err := InjectRules(kind, projectDir)
+	if err != nil {
+		// Non-fatal: rules injection is best-effort
+		result.RulesError = err
+		return result, nil
+	}
+
+	result.RulesPath = rulesResult.Path
+	result.RulesInjected = rulesResult.Injected
+	result.RulesAlreadyHad = rulesResult.AlreadyHad
+	result.RulesCreated = rulesResult.Created
+
+	return result, nil
+}
+
+// TakeoverWithRulesResult describes the outcome of ConnectTakeoverWithRules.
+type TakeoverWithRulesResult struct {
+	ConfigPath      string
+	Backup          BackupResult
+	ProjectDir      string
+	RulesPath       string
+	RulesInjected   bool
+	RulesAlreadyHad bool
+	RulesCreated    bool
+	RulesError      error
+}
+
 // ConnectOpenCode writes the 1mcp.in entry in OpenCode's config format.
 // OpenCode uses a "mcp" key with a different entry shape.
 // When entry.Type is "http" or "remote", we use remote format with URL;
@@ -581,7 +650,7 @@ func ConnectOpenCode(entry ServerEntry) (path string, err error) {
 	if err != nil {
 		return "", err
 	}
-	root, err := readJSONObject(path)
+	root, err := readJSONCObject(path)
 	if err != nil {
 		return "", err
 	}
@@ -851,6 +920,36 @@ func readJSONObject(path string) (map[string]any, error) {
 	}
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if m == nil {
+		m = map[string]any{}
+	}
+	return m, nil
+}
+
+// readJSONCObject reads a JSONC file (JSON with Comments) and returns the parsed object.
+// It strips comments before parsing. Used for OpenCode's opencode.jsonc.
+func readJSONCObject(path string) (map[string]any, error) {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return map[string]any{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	if len(b) == 0 {
+		return map[string]any{}, nil
+	}
+
+	// Strip JSONC comments
+	cleanJSON := StripJSONC(string(b))
+	if len(cleanJSON) == 0 {
+		return map[string]any{}, nil
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal([]byte(cleanJSON), &m); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	if m == nil {

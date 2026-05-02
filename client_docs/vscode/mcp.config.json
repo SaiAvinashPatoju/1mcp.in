@@ -1,0 +1,15 @@
+{
+  "servers": {
+    "mach1": {
+      "type": "http",
+      "url": "http://127.0.0.1:9099/mcp",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      }
+    }
+  }
+}
+
+// Path: ~/AppData/Roaming/Code/User/mcp.json (Windows)
+// Path: ~/Library/Application Support/Code/User/mcp.json (macOS)
+// Path: ~/.config/Code/User/mcp.json (Linux)

@@ -1,0 +1,14 @@
+{
+  "mcp": {
+    "mach1": {
+      "type": "remote",
+      "url": "http://127.0.0.1:9099/mcp",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      },
+      "enabled": true
+    }
+  }
+}
+
+// Path: ~/.config/opencode/opencode.json

@@ -1,0 +1,9 @@
+.copilot/copilot-instructions.md
+
+Always-on instructions
+Always-on instructions are automatically included in every chat request. Use them for project-wide coding standards, architecture decisions, and conventions that apply to all code.
+
+A single .copilot/copilot-instructions.md file
+
+Automatically applies to all chat requests in the workspace
+Stored within the workspace

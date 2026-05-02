@@ -710,6 +710,96 @@ export async function toggleSkillEnabled(id: string) {
 	}
 }
 
+// ── Bundles ──
+
+export type Bundle = {
+	id: string;
+	name: string;
+	description: string;
+	version: string;
+	mcp_ids: string[];
+	installed?: boolean;
+	enabled?: boolean;
+};
+
+export const bundles = writable<Bundle[]>([
+	{
+		id: 'github-maintainer',
+		name: 'GitHub Maintainer',
+		description: 'Complete GitHub repository management bundle with issue tracking, PR review, and release management.',
+		version: '1.0.0',
+		mcp_ids: ['github', 'sequential-thinking', 'memory'],
+		installed: false,
+		enabled: true
+	}
+]);
+
+export async function fetchBundles() {
+	try {
+		if (isTauri) {
+			const localBundles = await invokeDesktop<Bundle[]>('list_bundles');
+			if (localBundles && localBundles.length > 0) {
+				bundles.set(localBundles);
+			}
+			return;
+		}
+		const res = await fetch(`${API_URL}/api/bundles`);
+		if (res.ok) {
+			const data = await res.json();
+			bundles.set(data.items ?? []);
+		}
+	} catch {
+		// Keep static defaults
+	}
+}
+
+export async function installBundle(id: string) {
+	const bundle = get(bundles).find((b) => b.id === id);
+	if (!bundle || bundle.installed) return;
+
+	// Install all MCPs in the bundle
+	for (const mcpId of bundle.mcp_ids) {
+		const alreadyInstalled = get(installed).some((m) => m.id === mcpId);
+		if (!alreadyInstalled) {
+			await installMcp(mcpId);
+		}
+	}
+
+	bundles.update((list) =>
+		list.map((b) => (b.id === id ? { ...b, installed: true } : b))
+	);
+
+	if (isTauri) {
+		const updated = get(bundles).find((b) => b.id === id);
+		if (updated) {
+			await invokeDesktop('install_bundle', { bundle: updated });
+		}
+	}
+}
+
+export async function uninstallBundle(id: string) {
+	const bundle = get(bundles).find((b) => b.id === id);
+	if (!bundle || !bundle.installed) return;
+
+	// Only uninstall MCPs that aren't used by other bundles
+	for (const mcpId of bundle.mcp_ids) {
+		const onlyForThisBundle = !get(bundles).some(
+			(b) => b.id !== id && b.installed && b.mcp_ids.includes(mcpId)
+		);
+		if (onlyForThisBundle) {
+			await uninstallMcp(mcpId);
+		}
+	}
+
+	bundles.update((list) =>
+		list.map((b) => (b.id === id ? { ...b, installed: false } : b))
+	);
+
+	if (isTauri) {
+		await invokeDesktop('uninstall_bundle', { id });
+	}
+}
+
 // ── Dashboard Stores ──
 
 export const routerStatus = writable<RouterStatus>({
@@ -735,7 +825,7 @@ export const activityLog = writable<ActivityItem[]>([]);
 export const mcpServers = writable<McpServerDetail[]>([]);
 
 export const isConsoleExpanded = writable(false);
-export const consoleTab = writable<'output' | 'problems' | 'debug'>('output');
+export const consoleTab = writable<'output' | 'problems' | 'debug' | 'cli'>('output');
 
 // ── Zoom Level ──
 export const zoomLevel = writable(1.0);

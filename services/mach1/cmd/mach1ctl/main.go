@@ -72,6 +72,10 @@ func main() {
 		err = runStart(args)
 	case "connect":
 		err = runConnect(args)
+	case "inject-rules":
+		err = runInjectRules(args)
+	case "remove-rules":
+		err = runRemoveRules(args)
 	case "disconnect":
 		err = runDisconnect(args)
 	case "doctor":
@@ -95,8 +99,8 @@ func usage() {
 
   catalog list [--catalog FILE]
   install <id> [--catalog FILE]
-	tools pending
-	tools approve <mcp-id> <tool-name>
+  tools pending
+  tools approve <mcp-id> <tool-name>
   uninstall <id>
   list
   enable <id> | disable <id>
@@ -104,7 +108,8 @@ func usage() {
   env unset <id> NAME
   env list <id>
   start [--transport http|stdio]
-  connect <vscode|cursor|claude|claudecode|windsurf|codex|opencode|antigravity> [--transport stdio|http] [--url URL]
+  connect <vscode|cursor|claude|claudecode|windsurf|codex|opencode|antigravity> [--transport stdio|http] [--url URL] [--with-rules] [project-dir]
+  inject-rules <vscode|cursor|claude|claudecode|windsurf|codex|opencode> [project-dir]
   disconnect <vscode|cursor|claude|claudecode|windsurf|codex|opencode|antigravity>
   doctor
 
@@ -471,11 +476,14 @@ func envList(args []string) error {
 
 func runConnect(args []string) error {
 	if len(args) < 1 {
-		return errors.New("usage: mach1ctl connect <vscode|cursor|claude|claudecode|windsurf|codex|opencode|antigravity> [--transport stdio|http] [--url URL]")
+		return errors.New("usage: mach1ctl connect <vscode|cursor|claude|claudecode|windsurf|codex|opencode|antigravity> [--transport stdio|http] [--url URL] [--with-rules] [project-dir]")
 	}
 	kind := clients.Kind(args[0])
 	transport := "stdio"
 	url := "http://127.0.0.1:3000/mcp"
+	withRules := false
+	var projectDir string
+
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--transport":
@@ -490,9 +498,20 @@ func runConnect(args []string) error {
 			}
 			url = args[i+1]
 			i++
+		case "--with-rules":
+			withRules = true
 		default:
-			return fmt.Errorf("unknown connect flag: %s", args[i])
+			// Check if it's the project directory (no flag prefix)
+			if !strings.HasPrefix(args[i], "--") {
+				projectDir = args[i]
+			} else {
+				return fmt.Errorf("unknown connect flag: %s", args[i])
+			}
 		}
+	}
+
+	if withRules {
+		return connectWithRules(kind, transport, url, projectDir)
 	}
 
 	if transport == "http" {
@@ -596,6 +615,113 @@ func connectStdio(kind clients.Kind) error {
 	}
 }
 
+func connectWithRules(kind clients.Kind, transport, url, projectDir string) error {
+	// Build the server entry
+	var entry clients.ServerEntry
+	if transport == "http" {
+		entry = clients.ServerEntry{
+			Type:    "remote",
+			Command: url,
+		}
+	} else {
+		exe, err := centralBinaryPath()
+		if err != nil {
+			return err
+		}
+		dbPath, err := paths.RegistryDB()
+		if err != nil {
+			return err
+		}
+		entry = clients.ServerEntry{
+			Command: exe,
+			Args:    []string{"--db", dbPath},
+		}
+		// Clients that require explicit type:stdio in their config
+		if kind == clients.VSCode || kind == clients.Cursor || kind == clients.Windsurf {
+			entry.Type = "stdio"
+		}
+	}
+
+	// Use combined takeover with rules injection
+	result, err := clients.ConnectTakeoverWithRules(kind, entry, projectDir)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("connected mach1 (%s) in %s\n", transport, result.ConfigPath)
+	if result.Backup.BackedUpCount > 0 {
+		fmt.Printf("  backed up %d existing MCP(s) to %s\n", result.Backup.BackedUpCount, result.Backup.BackupPath)
+	}
+
+	if result.RulesInjected {
+		fmt.Printf("  injected 1MCP directive into %s\n", result.RulesPath)
+	} else if result.RulesAlreadyHad {
+		fmt.Printf("  rule file already has 1MCP directive (%s)\n", result.RulesPath)
+	} else if result.RulesCreated {
+		fmt.Printf("  created rule file with 1MCP directive (%s)\n", result.RulesPath)
+	}
+
+	if result.RulesError != nil {
+		fmt.Fprintf(os.Stderr, "  warning: rules injection failed: %v\n", result.RulesError)
+	}
+
+	return nil
+}
+
+func runInjectRules(args []string) error {
+	if len(args) < 1 {
+		return errors.New("usage: mach1ctl inject-rules <vscode|cursor|claude|claudecode|windsurf|codex|opencode> [project-dir]")
+	}
+
+	kind := clients.Kind(args[0])
+	projectDir := ""
+	if len(args) >= 2 {
+		projectDir = args[1]
+	}
+
+	result, err := clients.InjectRules(kind, projectDir)
+	if err != nil {
+		return fmt.Errorf("inject rules: %w", err)
+	}
+
+	if result.AlreadyHad {
+		fmt.Printf("rule file already has 1MCP directive (%s)\n", result.Path)
+	} else if result.Injected {
+		if result.Created {
+			fmt.Printf("created rule file with 1MCP directive (%s)\n", result.Path)
+		} else {
+			fmt.Printf("injected 1MCP directive into %s\n", result.Path)
+		}
+	}
+
+	return nil
+}
+
+func runRemoveRules(args []string) error {
+	if len(args) < 1 {
+		return errors.New("usage: mach1ctl remove-rules <vscode|cursor|claude|claudecode|windsurf|codex|opencode> [project-dir]")
+	}
+
+	kind := clients.Kind(args[0])
+	projectDir := ""
+	if len(args) >= 2 {
+		projectDir = args[1]
+	}
+
+	removed, err := clients.RemoveRules(kind, projectDir)
+	if err != nil {
+		return fmt.Errorf("remove rules: %w", err)
+	}
+
+	if removed {
+		fmt.Printf("removed 1MCP directive from rule file (%s)\n", kind)
+	} else {
+		fmt.Printf("no 1MCP directive found for %s\n", kind)
+	}
+
+	return nil
+}
+
 func runDisconnect(args []string) error {
 	if len(args) < 1 {
 		return errors.New("usage: mach1ctl disconnect <vscode|cursor|claude|claudecode|windsurf|codex|opencode|antigravity>")
@@ -638,6 +764,7 @@ func runDisconnect(args []string) error {
 		return nil
 	}
 }
+
 // ----- doctor ----------------------------------------------------------------
 
 func runDoctor(_ []string) error {

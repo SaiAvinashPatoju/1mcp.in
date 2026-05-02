@@ -1,0 +1,108 @@
+~/.config/opencode/AGENTS.md
+
+You can also have global rules in a ~/.config/opencode/AGENTS.md file. This gets applied across all opencode sessions.
+
+Since this isn’t committed to Git or shared with your team, we recommend using this to specify any personal rules that the LLM should follow.
+
+Example
+You can also just create this file manually. Here’s an example of some things you can put into an AGENTS.md file.
+
+AGENTS.md
+# SST v3 Monorepo Project
+
+This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for package management.
+
+## Project Structure
+
+- `packages/` - Contains all workspace packages (functions, core, web, etc.)
+- `infra/` - Infrastructure definitions split by service (storage.ts, api.ts, web.ts)
+- `sst.config.ts` - Main SST configuration with dynamic imports
+
+## Code Standards
+
+- Use TypeScript with strict mode enabled
+- Shared code goes in `packages/core/` with proper exports configuration
+- Functions go in `packages/functions/`
+- Infrastructure should be split into logical files in `infra/`
+
+## Monorepo Conventions
+
+- Import shared modules using workspace names: `@my-app/core/example`
+
+
+
+Local
+Add local MCP servers using type to "local" within the MCP object.
+
+opencode.jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-local-mcp-server": {
+      "type": "local",
+      // Or ["bun", "x", "my-mcp-command"]
+      "command": ["npx", "-y", "my-mcp-command"],
+      "enabled": true,
+      "environment": {
+        "MY_ENV_VAR": "my_env_var_value",
+      },
+    },
+  },
+}
+
+The command is how the local MCP server is started. You can also pass in a list of environment variables as well.
+
+For example, here’s how you can add the test @modelcontextprotocol/server-everything MCP server.
+
+opencode.jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mcp_everything": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+    },
+  },
+}
+
+And to use it I can add use the mcp_everything tool to my prompts.
+
+use the mcp_everything tool to add the number 3 and 4
+
+Options
+Here are all the options for configuring a local MCP server.
+
+Option	Type	Required	Description
+type	String	Y	Type of MCP server connection, must be "local".
+command	Array	Y	Command and arguments to run the MCP server.
+environment	Object		Environment variables to set when running the server.
+enabled	Boolean		Enable or disable the MCP server on startup.
+timeout	Number		Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds).
+Remote
+Add remote MCP servers by setting type to "remote".
+
+opencode.json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-remote-mcp": {
+      "type": "remote",
+      "url": "https://my-mcp-server.com",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer MY_API_KEY"
+      }
+    }
+  }
+}
+
+The url is the URL of the remote MCP server and with the headers option you can pass in a list of headers.
+
+Options
+Option	Type	Required	Description
+type	String	Y	Type of MCP server connection, must be "remote".
+url	String	Y	URL of the remote MCP server.
+enabled	Boolean		Enable or disable the MCP server on startup.
+headers	Object		Headers to send with the request.
+oauth	Object		OAuth authentication configuration. See OAuth section below.
+timeout	Number		Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds).

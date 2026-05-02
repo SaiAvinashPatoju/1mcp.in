@@ -64,6 +64,25 @@
 	let filterText = '';
 	let tauriUnlisten: (() => void) | null = null;
 
+	let cliCommand = '';
+	let cliHistory: { cmd: string; out: string; err: string }[] = [];
+	let cliLoading = false;
+
+	async function handleCliCommand(e: KeyboardEvent) {
+		if (e.key !== 'Enter' || !cliCommand.trim() || cliLoading) return;
+		const cmd = cliCommand.trim();
+		cliCommand = '';
+		cliLoading = true;
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			const result = await invoke<{ output: string; error: string }>('execute_command', { command: cmd });
+			cliHistory = [...cliHistory, { cmd, out: result.output, err: result.error }];
+		} catch (err: any) {
+			cliHistory = [...cliHistory, { cmd, out: '', err: err?.message ?? 'Command failed' }];
+		}
+		cliLoading = false;
+	}
+
 	function pushLog(source: string, message: string, type: 'info'|'warn'|'error'|'success' = 'info') {
 		const time = new Date().toISOString().split('T')[1].slice(0, 12);
 		const level = type === 'error' ? 'ERR' : type === 'warn' ? 'WRN' : type === 'success' ? 'OK' : 'INF';
@@ -193,6 +212,9 @@
 					<button type="button" class="flex items-center gap-1.5 px-3 h-full transition-colors {$consoleTab === 'debug' && $isConsoleExpanded ? 'text-white/80 border-b border-orange-500' : 'text-white/30 hover:text-white/50'}" on:click={() => { consoleTab.set('debug'); isConsoleExpanded.set(true); }}>
 						Debug
 					</button>
+					<button type="button" class="flex items-center gap-1.5 px-3 h-full transition-colors {$consoleTab === 'cli' && $isConsoleExpanded ? 'text-white/80 border-b border-orange-500' : 'text-white/30 hover:text-white/50'}" on:click={() => { consoleTab.set('cli'); isConsoleExpanded.set(true); }}>
+						CLI
+					</button>
 
 					<div class="flex-1"></div>
 
@@ -229,6 +251,34 @@
 							{/if}
 						{:else if $consoleTab === 'problems'}
 							<div class="flex items-center justify-center h-full text-white/15 text-xs select-none">No problems detected</div>
+						{:else if $consoleTab === 'cli'}
+							<div class="flex flex-col h-full">
+								<div class="flex-1 overflow-y-auto p-2 space-y-1">
+									{#each cliHistory as entry}
+										<div class="text-white/40 font-mono text-[11px]">&gt; {entry.cmd}</div>
+										{#if entry.out}
+											<div class="text-emerald-400/80 pl-3 font-mono text-[11px]">{entry.out}</div>
+										{/if}
+										{#if entry.err}
+											<div class="text-red-400/80 pl-3 font-mono text-[11px]">{entry.err}</div>
+										{/if}
+									{/each}
+									{#if cliLoading}
+										<div class="text-white/20 pl-3 font-mono text-[11px]">Executing...</div>
+									{/if}
+								</div>
+								<div class="flex items-center gap-2 px-2 py-1.5 border-t border-white/[0.04] bg-[#0a0a0f]">
+									<span class="text-orange-400 text-xs font-mono">&gt;</span>
+									<input
+										type="text"
+										bind:value={cliCommand}
+										on:keydown={handleCliCommand}
+										placeholder="Type a command..."
+										disabled={cliLoading}
+										class="flex-1 bg-transparent text-xs text-white/70 font-mono placeholder-white/20 focus:outline-none"
+									/>
+								</div>
+							</div>
 						{:else}
 							<div class="flex items-center justify-center h-full text-white/15 text-xs select-none">Debug console — attach via Tauri DevTools</div>
 						{/if}

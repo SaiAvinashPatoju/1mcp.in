@@ -1,0 +1,84 @@
+~\.gemini\antigravity\mcp_config.json
+
+Configuring MCP
+MCP (Model Context Protocol) enables LLMs to access custom tools and services. An MCP server implements the MCP protocol and provides a set of related tools and services.
+
+In this file, you can specify MCP servers you want Agent to use. Here is an example configuration that sets up a single MCP server, for GitHub:
+
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "<YOUR_TOKEN>"
+      }
+    }
+  }
+}
+Remote MCP connections are also supported. Here is an example configuration for the remote GitHub MCP server:
+
+{
+  "mcpServers": {
+    "remote-github": {
+      "serverUrl": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer <YOUR_TOKEN>",
+        "Content-Type": "application/json"
+      }
+    }
+  }
+}
+
+Connecting Custom MCP Servers
+To connect to a custom MCP server:
+
+Open the MCP store via the "..." dropdown at the top of the editor's agent panel.
+Click on "Manage MCP Servers"
+Click on "View raw config"
+Modify the mcp_config.json with your custom MCP server configuration.
+The configuration file is located at ~/.gemini/antigravity/mcp_config.json.
+
+Configuration Structure
+The configuration file has a single mcpServers object where you define each server you want to connect to.
+
+json
+content_copy
+{
+  "mcpServers": {
+    "serverName": {
+      "command": "path/to/executable",
+      "args": [
+        "--arg1",
+        "value1"
+      ],
+      "env": {
+        "API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+Configuration Properties
+Each server entry supports the following properties:
+
+Transport (one required):
+
+command (string): Path to the executable for stdio transport.
+serverUrl (string): URL for remote servers for Streamable HTTP transport.
+Optional:
+
+args (string[]): Command-line arguments for stdio transport.
+env (object): Environment variables for the stdio server process.
+cwd (string): Working directory for stdio servers.
+headers (object): Custom HTTP headers for remote servers.
+authProviderType (string): Authentication provider. Supports "google_credentials" for ADC.
+oauth (object): OAuth client credentials (clientId, clientSecret).
+disabled (boolean): Temporarily disable a server without removing its configuration.
+disabledTools (string[]): Tool names to not provide to the model.
+
+
+Global Rules
+Global rules live in ~/.gemini/GEMINI.md and are applied across all workspaces.

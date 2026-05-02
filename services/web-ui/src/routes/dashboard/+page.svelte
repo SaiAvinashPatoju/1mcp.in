@@ -200,9 +200,9 @@
 						</div>
 						<p class="text-xs text-white/40">Single local router for all your MCP servers.</p>
 					</div>
-					<div class="text-right">
+					<div class="text-right max-w-[320px]">
 						<p class="text-[10px] text-white/30 uppercase tracking-wider mb-1">Connected Clients</p>
-						<div class="flex items-center gap-2">
+						<div class="flex items-center gap-2 mb-2">
 							{#each $clients.slice(0, 4) as client}
 								<div class="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.03] border border-white/[0.06]">
 									<span class="text-[10px] text-white/60">{client.name}</span>
@@ -214,6 +214,7 @@
 								</div>
 							{/each}
 						</div>
+						<p class="text-[9px] text-orange-400/60 leading-relaxed">For best results customise clients to use rules/subagents for tool optimization — 1mcp does this for you. Verify if anything gone wrong.</p>
 					</div>
 				</div>
 				<div class="flex items-center gap-6 text-xs">
@@ -349,74 +350,7 @@
 				{/if}
 			</div>
 
-			<!-- Bottom Row: Quick Actions + Command Line -->
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-				<!-- Quick Actions -->
-				<div class="rounded-xl bg-white/[0.02] border border-white/[0.06] p-5">
-					<h3 class="text-sm font-bold text-white/90 mb-4">Quick Actions</h3>
-					<div class="grid grid-cols-2 gap-3">
-						<button on:click={() => goto('/discover')} class="flex flex-col items-center gap-2 p-4 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-orange-500/30 hover:bg-white/[0.04] transition-all group">
-							<div class="w-8 h-8 rounded-lg bg-orange-500/10 text-orange-400 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-							</div>
-							<span class="text-xs text-white/60 group-hover:text-white/80">Add Server</span>
-						</button>
-						<button on:click={() => goto('/marketplace')} class="flex flex-col items-center gap-2 p-4 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-orange-500/30 hover:bg-white/[0.04] transition-all group">
-							<div class="w-8 h-8 rounded-lg bg-orange-500/10 text-orange-400 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-							</div>
-							<span class="text-xs text-white/60 group-hover:text-white/80">Install from Marketplace</span>
-						</button>
-						<button on:click={() => goto('/clients')} class="flex flex-col items-center gap-2 p-4 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-orange-500/30 hover:bg-white/[0.04] transition-all group">
-							<div class="w-8 h-8 rounded-lg bg-orange-500/10 text-orange-400 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-							</div>
-							<span class="text-xs text-white/60 group-hover:text-white/80">Connect Client</span>
-						</button>
-						<button on:click={() => goto('/logs')} class="flex flex-col items-center gap-2 p-4 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-orange-500/30 hover:bg-white/[0.04] transition-all group">
-							<div class="w-8 h-8 rounded-lg bg-orange-500/10 text-orange-400 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-							</div>
-							<span class="text-xs text-white/60 group-hover:text-white/80">View Logs</span>
-						</button>
-					</div>
-				</div>
 
-				<!-- Command Line -->
-				<div class="rounded-xl bg-white/[0.02] border border-white/[0.06] p-5 flex flex-col">
-					<div class="flex items-center justify-between mb-3">
-						<h3 class="text-sm font-bold text-white/90">Command Line</h3>
-						<button on:click|preventDefault={focusCommand} class="text-[11px] text-orange-400 hover:text-orange-300 transition-colors flex items-center gap-1">
-							View all commands
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-						</button>
-					</div>
-					<div class="flex-1 bg-[#050508] rounded-lg border border-white/[0.06] p-3 font-mono text-[11px] overflow-y-auto max-h-48 space-y-1">
-						{#each commandHistory as entry}
-							<div class="text-white/40">&gt; {entry.command}</div>
-							{#if entry.output}
-								<div class="text-emerald-400/80 pl-3">{entry.output}</div>
-							{/if}
-							{#if entry.error}
-								<div class="text-red-400/80 pl-3">{entry.error}</div>
-							{/if}
-						{/each}
-						{#if commandLoading}
-							<div class="text-white/20 pl-3">Executing...</div>
-						{/if}
-					</div>
-					<div class="mt-2 flex items-center gap-2">
-						<span class="text-orange-400 text-xs font-mono">&gt;</span>
-						<input
-							type="text"
-							bind:value={commandInput}
-							on:keydown={handleCommand}
-							placeholder="Type a command..."
-							class="flex-1 bg-transparent text-xs text-white/70 font-mono placeholder-white/20 focus:outline-none"
-						/>
-					</div>
-				</div>
-			</div>
 		</div>
 
 		<!-- Right Column -->

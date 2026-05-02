@@ -1,0 +1,5 @@
+[mcp_servers.mach1]
+url = "http://127.0.0.1:9099/mcp"
+bearer_token_env_var = "MACH1_HTTP_TOKEN"
+
+# Path: ~/.codex/config.toml

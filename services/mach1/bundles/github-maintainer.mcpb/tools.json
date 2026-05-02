@@ -1,0 +1,50 @@
+[
+  {
+    "server": "github",
+    "tool": "list_issues",
+    "description": "List issues in a GitHub repository, filterable by state, labels, and assignee.",
+    "annotations": { "readOnly": true }
+  },
+  {
+    "server": "github",
+    "tool": "get_issue",
+    "description": "Get full details of a specific issue including body, comments, and labels.",
+    "annotations": { "readOnly": true }
+  },
+  {
+    "server": "github",
+    "tool": "create_branch",
+    "description": "Create a new branch from a specified base branch.",
+    "annotations": { "destructive": false, "idempotent": false }
+  },
+  {
+    "server": "github",
+    "tool": "get_pull_request",
+    "description": "Get pull request details including diff, files changed, and metadata.",
+    "annotations": { "readOnly": true }
+  },
+  {
+    "server": "github",
+    "tool": "get_ci_status",
+    "description": "Get the CI/check run status for a pull request or commit SHA.",
+    "annotations": { "readOnly": true }
+  },
+  {
+    "server": "github",
+    "tool": "create_review",
+    "description": "Submit a review on a pull request (APPROVE, REQUEST_CHANGES, or COMMENT).",
+    "annotations": { "destructive": false, "idempotent": false }
+  },
+  {
+    "server": "github",
+    "tool": "merge_pull_request",
+    "description": "Merge a pull request using the specified strategy (merge, squash, rebase).",
+    "annotations": { "destructive": true, "idempotent": false }
+  },
+  {
+    "server": "github",
+    "tool": "delete_branch",
+    "description": "Delete a branch from the repository.",
+    "annotations": { "destructive": true, "idempotent": true }
+  }
+]
