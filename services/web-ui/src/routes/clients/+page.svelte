@@ -199,6 +199,7 @@
 						<span>Uptime: <span class="text-white/50">{formatUptime($routerStatus.uptime_seconds)}</span></span>
 						<span>Port: <span class="text-white/50">{$routerStatus.port}</span></span>
 						<span>Metrics: <span class="text-white/50">{$routerStatus.metrics_endpoint}</span></span>
+						<span class="ml-auto text-[9px] text-orange-400/60 leading-relaxed text-right max-w-[280px]">For best results customise clients to use rules/subagents for tool optimization — 1mcp does this for you. Verify if anything gone wrong.</span>
 					</div>
 				</div>
 			</div>
