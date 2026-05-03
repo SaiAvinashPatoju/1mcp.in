@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { toast } from '$lib/toast';
 	import McpConfigModal from '$lib/components/McpConfigModal.svelte';
+	import EnvSetupModal from '$lib/components/EnvSetupModal.svelte';
 	import {
 		installed,
 		marketplace,
@@ -53,11 +54,18 @@
 	let showConfigModal = false;
 	let configMcpId: string | null = null;
 	let apiKeyInput: Record<string, string> = {};
+	let apiKeyVisible: Record<string, boolean> = {};
 	let configMcpName = '';
 	let configMcpDescription = '';
 	let configMcpConfig: ServerConfig | null = null;
 	let configMcpHealth: McpHealthResult | null = null;
 	let configLoading = false;
+
+	// Env setup modal state
+	let showEnvModal = false;
+	let envModalMcpId = '';
+	let envModalMcpName = '';
+	let envModalRequiredEnv: string[] = [];
 
 	onMount(() => {
 		(async () => {
@@ -69,6 +77,19 @@
 		})();
 		return () => { if (stopSync) stopSync(); };
 	});
+
+	function cleanAuthor(author: string): string {
+		try {
+			const u = new URL(author);
+			if (u.hostname) {
+				const parts = u.pathname.replace(/^\//, '').replace(/\.git$/, '').split('/');
+				return parts.slice(0, 2).join('/');
+			}
+		} catch {
+			// not a URL
+		}
+		return author;
+	}
 
 	function formatTimeAgo(timestamp: string | null): string {
 		if (!timestamp) return '—';
@@ -303,6 +324,15 @@
 		try {
 			await installMCP(id);
 			toast.success('MCP installed');
+			// Check if this MCP requires env vars
+			const mcp = $marketplace.find(m => m.id === id);
+			const envKeys = mcp?.requires_env ?? (mcp?.patProvider ? [`${mcp.patProvider.toUpperCase()}_TOKEN`] : []);
+			if (envKeys.length > 0) {
+				envModalMcpId = id;
+				envModalMcpName = mcp?.name ?? id;
+				envModalRequiredEnv = envKeys;
+				showEnvModal = true;
+			}
 			await fetchInstalled();
 			await fetchMcpServers();
 		} catch (e) {
@@ -734,7 +764,7 @@
 						</div>
 						<div>
 							<h3 class="text-sm font-bold text-white/90">{$serverDetail.name} MCP</h3>
-							<p class="text-[11px] text-white/30">{$serverDetail.author} · {$serverDetail.runtime} · v{$serverDetail.version}</p>
+							<p class="text-[11px] text-white/30">{cleanAuthor($serverDetail.author)} · {$serverDetail.runtime} · v{$serverDetail.version}</p>
 						</div>
 					</div>
 					<div class="flex items-center gap-2">
@@ -784,7 +814,7 @@
 			</div>
 
 			<!-- Detail Content -->
-			<div class="flex-1 overflow-y-auto p-5 space-y-5">
+			<div class="flex-1 overflow-y-auto min-h-0 p-5 space-y-5">
 				{#if detailTab === 'overview'}
 					<!-- Process Info -->
 					{#if $serverDetail.process}
@@ -876,13 +906,26 @@
 										{/if}
 									</div>
 									<div class="flex gap-2">
-										<input
-											value={apiKeyInput[$serverDetail.id] ?? ''}
-											on:input={(e) => { if ($serverDetail) apiKeyInput[$serverDetail.id] = (e.target as HTMLInputElement).value; }}
-											placeholder={envVars[patKey] ? 'Update token...' : `Enter ${mcp.patProvider} token...`}
-											type="password"
-											class="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-1.5 text-xs text-white/80 placeholder-white/20 focus:outline-none focus:border-orange-500/30"
-										/>
+										<div class="relative flex-1">
+											<input
+												value={apiKeyInput[$serverDetail.id] ?? ''}
+												on:input={(e) => { if ($serverDetail) apiKeyInput[$serverDetail.id] = (e.target as HTMLInputElement).value; }}
+												placeholder={envVars[patKey] ? 'Update token...' : `Enter ${mcp.patProvider} token...`}
+												type={apiKeyVisible[$serverDetail.id] ? 'text' : 'password'}
+												class="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-1.5 text-xs text-white/80 placeholder-white/20 focus:outline-none focus:border-orange-500/30 pr-8"
+											/>
+											<button
+												on:click={() => { if ($serverDetail) apiKeyVisible[$serverDetail.id] = !apiKeyVisible[$serverDetail.id]; apiKeyInput = {...apiKeyInput}; }}
+												class="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+												aria-label={apiKeyVisible[$serverDetail.id] ? 'Hide token' : 'Show token'}
+											>
+												{#if apiKeyVisible[$serverDetail.id]}
+													<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+												{:else}
+													<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+												{/if}
+											</button>
+										</div>
 										<button
 											on:click={async () => {
 												const val = apiKeyInput[$serverDetail.id];
@@ -938,7 +981,30 @@
 					{/if}
 				{:else if detailTab === 'config'}
 					{#if $serverConfig}
+						{@const configJson = JSON.stringify({
+							mcpServers: {
+								[$serverDetail?.id ?? 'server']: {
+									command: $serverConfig.command,
+									args: $serverConfig.args,
+									...(($serverConfig.cwd) ? { cwd: $serverConfig.cwd } : {}),
+									...(($serverConfig.env.length > 0) ? {
+										env: $serverConfig.env.reduce((acc, e) => ({ ...acc, [e.key]: e.value }), {} as Record<string, string>)
+									} : {})
+								}
+							}
+						}, null, 2)}
 						<div class="space-y-4">
+							<div class="flex items-center justify-between">
+								<p class="text-[10px] text-white/30 uppercase tracking-wider">mcp.json Config</p>
+								<button
+									on:click={() => { navigator.clipboard.writeText(configJson); toast.success('Config copied'); }}
+									class="flex items-center gap-1 px-2 py-1 rounded bg-white/[0.04] border border-white/[0.06] text-[10px] text-white/40 hover:text-white/70 transition-colors"
+								>
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+									Copy
+								</button>
+							</div>
+							<pre class="text-[10px] text-white/60 font-mono bg-[#050508] border border-white/[0.06] rounded-lg p-3 overflow-x-auto leading-relaxed whitespace-pre">{configJson}</pre>
 							<div>
 								<p class="text-[10px] text-white/30 uppercase tracking-wider mb-1">Command</p>
 								<p class="text-xs text-white/70 font-mono bg-white/[0.02] rounded p-2">{$serverConfig.command}</p>
@@ -960,22 +1026,59 @@
 						<p class="text-xs text-white/20 text-center py-8">No config available</p>
 					{/if}
 				{:else if detailTab === 'environment'}
-					{#if $serverConfig && $serverConfig.env.length > 0}
-						<div class="space-y-2">
-							{#each $serverConfig.env as env}
-								<div class="rounded-lg bg-white/[0.02] border border-white/[0.06] p-3">
-									<div class="flex items-center justify-between mb-1">
-										<span class="text-xs font-medium text-white/60">{env.key}</span>
-										{#if env.secret}
-											<span class="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20">Secret</span>
-										{/if}
+					{@const mcp = servers.find(s => s.id === $serverDetail?.id)}
+					{@const envVars = $serverDetail ? getMcpEnvValues($serverDetail.id) : {}}
+					{@const mktItem = $marketplace.find(m => m.id === $serverDetail?.id)}
+					{@const requiredKeys = mktItem?.requires_env ?? (mcp?.patProvider ? [`${mcp.patProvider.toUpperCase()}_TOKEN`] : [])}
+					{@const allKeys = [...new Set([...requiredKeys, ...Object.keys(envVars)])]}
+					{#if allKeys.length > 0}
+						<div class="space-y-3">
+							{#each allKeys as key}
+								<div>
+									<label class="block text-[11px] text-white/50 mb-1.5 font-medium">{key}</label>
+									<div class="flex gap-2">
+										<div class="relative flex-1">
+											<input
+												bind:value={apiKeyInput[key]}
+												placeholder={envVars[key] ? 'Update value...' : `Enter ${key}...`}
+												type={apiKeyVisible[key] ? 'text' : 'password'}
+												class="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-1.5 text-xs text-white/80 placeholder-white/20 focus:outline-none focus:border-orange-500/30 pr-8"
+											/>
+											<button
+												on:click={() => { apiKeyVisible[key] = !apiKeyVisible[key]; apiKeyInput = {...apiKeyInput}; }}
+												class="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+												aria-label={apiKeyVisible[key] ? 'Hide' : 'Show'}
+											>
+												{#if apiKeyVisible[key]}
+													<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+												{:else}
+													<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+												{/if}
+											</button>
+										</div>
+										<button
+											on:click={async () => {
+												const val = apiKeyInput[key];
+												if (val && $serverDetail) {
+													await setMcpEnv($serverDetail.id, { [key]: val });
+													toast.success(`${key} saved`);
+													apiKeyInput[key] = '';
+													fetchServerConfig($serverDetail.id);
+												}
+											}}
+											class="px-3 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-400 hover:bg-orange-500/20 transition-colors"
+										>
+											Save
+										</button>
 									</div>
-									<p class="text-[11px] text-white/30 font-mono">{env.secret ? '••••••••' : env.value}</p>
+									{#if envVars[key]}
+										<p class="text-[10px] text-emerald-400/60 mt-1">Current: {envVars[key] ? '••••••••' : 'Not set'}</p>
+									{/if}
 								</div>
 							{/each}
 						</div>
 					{:else}
-						<p class="text-xs text-white/20 text-center py-8">No environment variables set</p>
+						<p class="text-xs text-white/20 text-center py-8">No environment variables configured or required</p>
 					{/if}
 				{:else if detailTab === 'logs'}
 					{#if $serverLogs.length === 0}
@@ -1011,3 +1114,22 @@
 		onAutoDetect={handleAutoDetect}
 	/>
 {/if}
+
+<EnvSetupModal
+	bind:show={showEnvModal}
+	mcpId={envModalMcpId}
+	mcpName={envModalMcpName}
+	requiredEnv={envModalRequiredEnv}
+	on:complete={() => {
+		showEnvModal = false;
+		fetchInstalled();
+		fetchMcpServers();
+	}}
+	on:skip={() => {
+		showEnvModal = false;
+		toast.info('You can configure credentials later in the server settings');
+	}}
+/>
+
+<style>
+</style>

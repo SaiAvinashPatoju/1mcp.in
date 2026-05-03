@@ -767,12 +767,21 @@ func runDisconnect(args []string) error {
 
 // ----- doctor ----------------------------------------------------------------
 
-func runDoctor(_ []string) error {
-	checks := []struct {
+func runDoctor(args []string) error {
+	fix := false
+	for _, a := range args {
+		if a == "--fix" {
+			fix = true
+		}
+	}
+
+	type check struct {
 		label string
 		fn    func() (string, error)
-	}{
-		{"mach1 binary", func() (string, error) { return centralBinaryPath() }},
+		fixFn func() error
+	}
+	checks := []check{
+		{"mach1 binary", func() (string, error) { return centralBinaryPath() }, nil},
 		{"registry db", func() (string, error) {
 			p, err := paths.RegistryDB()
 			if err != nil {
@@ -782,18 +791,55 @@ func runDoctor(_ []string) error {
 				return p + " (exists)", nil
 			}
 			return p + " (will be created)", nil
-		}},
-		{"node (npx)", func() (string, error) { return exec.LookPath("npx") }},
-		{"python (uvx)", func() (string, error) { return exec.LookPath("uvx") }},
-		{"docker", func() (string, error) { return exec.LookPath("docker") }},
+		}, nil},
+		{"node (npx)", func() (string, error) { return exec.LookPath("npx") }, nil},
+		{"python (uvx)", func() (string, error) { return exec.LookPath("uvx") },
+			func() error {
+				fmt.Println("  -> attempting pip install uv...")
+				installCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+				defer cancel()
+				cmd := exec.CommandContext(installCtx, "pip", "install", "uv")
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				if err := cmd.Run(); err != nil {
+					return fmt.Errorf("pip install uv failed: %w", err)
+				}
+				if _, err := exec.LookPath("uvx"); err != nil {
+					return fmt.Errorf("uvx still not found after install (may need PATH refresh or restart terminal)")
+				}
+				fmt.Println("  -> uv installed successfully")
+				return nil
+			},
+		},
+		{"docker", func() (string, error) { return exec.LookPath("docker") }, nil},
 	}
+
+	allOK := true
 	for _, c := range checks {
 		v, err := c.fn()
 		if err != nil {
 			fmt.Printf("[!] %-20s %v\n", c.label, err)
+			allOK = false
+			if fix && c.fixFn != nil {
+				if ferr := c.fixFn(); ferr != nil {
+					fmt.Printf("    fix failed: %v\n", ferr)
+				} else {
+					// Re-verify after fix.
+					if v2, err2 := c.fn(); err2 == nil {
+						fmt.Printf("[ok] %-19s %s\n", c.label, v2)
+						allOK = true
+					} else {
+						fmt.Printf("[!] %-20s %v (still broken after fix)\n", c.label, err2)
+					}
+				}
+			}
 			continue
 		}
 		fmt.Printf("[ok] %-19s %s\n", c.label, v)
+	}
+	if !allOK {
+		fmt.Println("\nSome checks failed. Run with --fix to auto-install missing runtimes.")
+		fmt.Println("  mach1ctl doctor --fix")
 	}
 	return nil
 }

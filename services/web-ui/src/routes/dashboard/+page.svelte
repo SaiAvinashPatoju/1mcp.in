@@ -200,9 +200,9 @@
 						</div>
 						<p class="text-xs text-white/40">Single local router for all your MCP servers.</p>
 					</div>
-					<div class="text-right max-w-[320px]">
+					<div class="text-right">
 						<p class="text-[10px] text-white/30 uppercase tracking-wider mb-1">Connected Clients</p>
-						<div class="flex items-center gap-2 mb-2">
+						<div class="flex items-center gap-2">
 							{#each $clients.slice(0, 4) as client}
 								<div class="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.03] border border-white/[0.06]">
 									<span class="text-[10px] text-white/60">{client.name}</span>
@@ -214,7 +214,6 @@
 								</div>
 							{/each}
 						</div>
-						<p class="text-[9px] text-orange-400/60 leading-relaxed">For best results customise clients to use rules/subagents for tool optimization — 1mcp does this for you. Verify if anything gone wrong.</p>
 					</div>
 				</div>
 				<div class="flex items-center gap-6 text-xs">
@@ -259,7 +258,7 @@
 						</button>
 					</div>
 				</div>
-				<div class="overflow-x-auto">
+				<div class="min-w-0">
 					<table class="w-full text-left">
 						<thead>
 							<tr class="border-b border-white/[0.04]">

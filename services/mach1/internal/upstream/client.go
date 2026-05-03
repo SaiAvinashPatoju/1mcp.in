@@ -6,6 +6,7 @@
 package upstream
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -49,6 +50,12 @@ type Client struct {
 	exitCh   chan struct{}
 	tools    []proto.Tool // cached after initialize
 	toolsErr error
+
+	// startupStderr captures child stderr during the handshake phase.
+	// If handshake fails the content is included in the error message so
+	// users see the actual reason (e.g. "module not found") instead of an
+	// opaque "child exited".
+	startupStderr bytes.Buffer
 }
 
 func New(spec Spec, logger *slog.Logger) *Client {
@@ -123,7 +130,14 @@ func (c *Client) Start(ctx context.Context) error {
 	go c.waitProc()
 
 	if err := c.handshake(ctx); err != nil {
+		// Wait briefly for stderr to arrive so we can include it in the error.
+		_ = c.stdin.Close()
+		time.Sleep(200 * time.Millisecond)
+		stderrOutput := c.startupStderr.String()
 		_ = c.Close()
+		if stderrOutput != "" {
+			return fmt.Errorf("%w (stderr: %s)", err, security.RedactString(truncateStr(stderrOutput, 512)))
+		}
 		return err
 	}
 	return nil
@@ -131,14 +145,20 @@ func (c *Client) Start(ctx context.Context) error {
 
 func (c *Client) drainStderr(r io.ReadCloser) {
 	defer r.Close()
-	br := framing.NewReader(r) // reuse: it's just a line scanner
+	br := framing.NewReader(r)
 	for {
 		line, err := br.Read()
 		if err != nil {
 			return
 		}
 		if len(line) > 0 {
-			c.logger.Debug("child stderr", "line", security.RedactString(string(line)))
+			redacted := security.RedactString(string(line))
+			c.logger.Debug("child stderr", "line", redacted)
+			// Capture into startup buffer (bounded to 4KB) for error diagnostics.
+			if c.startupStderr.Len() < 4096 {
+				c.startupStderr.Write(line)
+				c.startupStderr.WriteByte('\n')
+			}
 		}
 	}
 }
@@ -337,13 +357,13 @@ func (c *Client) Close() error {
 		_ = stdin.Close()
 	}
 	if cmd != nil && cmd.Process != nil {
-		// Give it a beat to exit on stdin close, then kill.
+		// Give it a beat to exit on stdin close, then kill the entire tree.
 		done := make(chan struct{})
 		go func() { <-c.exitCh; close(done) }()
 		select {
 		case <-done:
 		case <-time.After(2 * time.Second):
-			_ = cmd.Process.Kill()
+			_ = killProcessTree(cmd)
 		}
 	}
 	return nil
@@ -354,4 +374,11 @@ func truncate(b []byte, n int) string {
 		return string(b)
 	}
 	return string(b[:n]) + "..."
+}
+
+func truncateStr(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }

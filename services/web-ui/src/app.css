@@ -80,3 +80,13 @@ html {
 		transition-duration: 0.01ms !important;
 	}
 }
+
+/* Force dark native select/option styling to prevent invisible text in light OS theme */
+select, option {
+	color-scheme: dark;
+}
+
+select option {
+	background-color: #1a1a2e;
+	color: #e6edf3;
+}

@@ -66,15 +66,16 @@ type managed struct {
 	env      map[string]string
 	idleSec  int
 
-	mu        sync.Mutex
-	client    *upstream.Client
-	starting  chan struct{} // closed when start completes (success or fail)
-	startErr  error
-	idleTimer *time.Timer
-	tools     []proto.Tool // namespaced
-	blocked   map[string]registry.ToolReview
-	verified  bool
-	disabled  bool
+	mu            sync.Mutex
+	client        *upstream.Client
+	starting      chan struct{} // closed when start completes (success or fail)
+	startErr      error
+	lastStartFail time.Time     // timestamp of last failed start (for backoff)
+	idleTimer     *time.Timer
+	tools         []proto.Tool // namespaced
+	blocked       map[string]registry.ToolReview
+	verified      bool
+	disabled      bool
 }
 
 // Options configures a Supervisor at construction time.
@@ -241,7 +242,8 @@ func (s *Supervisor) warmup(ctx context.Context, mg *managed) {
 
 	c, err := s.startLocked(wctx, mg)
 	if err != nil {
-		s.logger.Warn("warmup failed", "id", mg.id, "err", err)
+		hint := warmupErrorHint(err)
+		s.logger.Warn("warmup failed", "id", mg.id, "err", err, "hint", hint)
 		return
 	}
 
@@ -259,6 +261,8 @@ func (s *Supervisor) warmup(ctx context.Context, mg *managed) {
 	s.scheduleIdleLocked(mg)
 }
 
+const startFailBackoff = 30 * time.Second
+
 // startLocked spawns mg.client if not running. Concurrent callers wait on
 // mg.starting. Returns the live client or an error.
 func (s *Supervisor) startLocked(ctx context.Context, mg *managed) (*upstream.Client, error) {
@@ -268,6 +272,15 @@ func (s *Supervisor) startLocked(ctx context.Context, mg *managed) (*upstream.Cl
 		s.resetIdleLocked(mg)
 		mg.mu.Unlock()
 		return c, nil
+	}
+	// Backoff: if we recently failed to start, don't retry immediately.
+	if !mg.lastStartFail.IsZero() && time.Since(mg.lastStartFail) < startFailBackoff {
+		err := mg.startErr
+		mg.mu.Unlock()
+		if err != nil {
+			return nil, fmt.Errorf("%w (backoff: retry in %s)", err, time.Until(mg.lastStartFail.Add(startFailBackoff)).Round(time.Second))
+		}
+		return nil, fmt.Errorf("start failed recently; retry in %s", time.Until(mg.lastStartFail.Add(startFailBackoff)).Round(time.Second))
 	}
 	if mg.starting != nil {
 		ch := mg.starting
@@ -298,6 +311,7 @@ func (s *Supervisor) startLocked(ctx context.Context, mg *managed) (*upstream.Cl
 	mg.mu.Lock()
 	if err != nil {
 		mg.startErr = err
+		mg.lastStartFail = time.Now()
 		close(mg.starting)
 		mg.starting = nil
 		mg.mu.Unlock()
@@ -305,6 +319,7 @@ func (s *Supervisor) startLocked(ctx context.Context, mg *managed) (*upstream.Cl
 	}
 	mg.client = c
 	mg.startErr = nil
+	mg.lastStartFail = time.Time{}
 	mg.verified = false
 	close(mg.starting)
 	mg.starting = nil
@@ -339,6 +354,7 @@ func (s *Supervisor) shutdownIdle(mg *managed) {
 	mg.client = nil
 	mg.idleTimer = nil
 	mg.verified = false
+	mg.lastStartFail = time.Time{}
 	mg.mu.Unlock()
 	if c != nil {
 		s.logger.Debug("idle shutdown", "id", mg.id)
@@ -805,6 +821,68 @@ func (s *Supervisor) Stop(id string) error {
 type RankedTool struct {
 	Tool  proto.Tool
 	Score float64
+}
+
+// warmupErrorHint maps common warmup errors to actionable fix suggestions.
+func warmupErrorHint(err error) string {
+	msg := err.Error()
+	if len(msg) == 0 {
+		return ""
+	}
+	switch {
+	case containsFold(msg, "not found in path"):
+		return "Install the missing runtime (see hint above) then restart mach1"
+	case containsFold(msg, "not found in $path"):
+		return "Install the missing runtime (see hint above) then restart mach1"
+	case containsFold(msg, "command not found"):
+		return "Install the missing runtime (see hint above) then restart mach1"
+	case containsFold(msg, "executable file not found"):
+		return "Install the missing runtime (see hint above) then restart mach1"
+	case containsFold(msg, "context deadline exceeded"):
+		return "The MCP timed out during startup. Check network connectivity or increase warmup timeout"
+	case containsFold(msg, "child exited"):
+		return "The MCP process exited immediately. Check stderr output above for the specific error (e.g. missing npm package)"
+	case containsFold(msg, "refused"):
+		return "The connection was refused. Check that any required services are running"
+	case containsFold(msg, "stderr"):
+		return "See the stderr output above for the specific error from the MCP process"
+	}
+	return ""
+}
+
+// containsFold reports whether s contains substr, case-insensitively.
+func containsFold(s, substr string) bool {
+	if len(substr) == 0 {
+		return true
+	}
+	if len(substr) > len(s) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if equalFold(s[i:i+len(substr)], substr) {
+			return true
+		}
+	}
+	return false
+}
+
+func equalFold(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		if toLower(a[i]) != toLower(b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func toLower(c byte) byte {
+	if c >= 'A' && c <= 'Z' {
+		return c + 32
+	}
+	return c
 }
 
 // RankToolsWithScores returns the top-k tools with cosine-similarity scores.

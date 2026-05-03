@@ -95,6 +95,7 @@ struct McpServerDetail {
     trust: String,
     last_used_at: Option<String>,
     installed_at: String,
+    tools_count: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -703,17 +704,37 @@ fn get_router_status(state: State<AppState>) -> Result<RouterStatus, String> {
 
 #[tauri::command]
 fn get_system_usage() -> Result<SystemUsage, String> {
-    use sysinfo::System;
+    use sysinfo::{Disks, System};
     let mut sys = System::new_all();
-    sys.refresh_all();
+
+    // Refresh CPU twice with a small delay for accurate first reading
+    sys.refresh_cpu();
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    sys.refresh_cpu();
 
     let cpu_percent = sys.global_cpu_info().cpu_usage();
     let total_mem = sys.total_memory() as f32;
     let used_mem = sys.used_memory() as f32;
     let memory_percent = if total_mem > 0.0 { (used_mem / total_mem) * 100.0 } else { 0.0 };
 
-    // Disk usage estimation (simplified)
-    let disk_percent = 32.0;
+    // Real disk usage from sysinfo
+    let disks = Disks::new_with_refreshed_list();
+    let (total_disk, used_disk) = {
+        let mut total: u64 = 0;
+        let mut available: u64 = 0;
+        for disk in &disks {
+            // Skip removable drives
+            if disk.is_removable() { continue; }
+            total += disk.total_space();
+            available += disk.available_space();
+        }
+        (total, available)
+    };
+    let disk_percent = if total_disk > 0 {
+        ((total_disk - used_disk) as f32 / total_disk as f32) * 100.0
+    } else {
+        0.0
+    };
 
     Ok(SystemUsage {
         cpu_percent,
@@ -776,6 +797,21 @@ fn get_mcp_servers(state: State<AppState>) -> Result<Vec<McpServerDetail>, Strin
         let status = if mcp.enabled { "running" } else { "sleeping" };
         let lifecycle = if mcp.id == "mach1" { "Manual" } else { "Auto (lazy)" };
         let trust = if mcp.id == "mach1" { "internal" } else { "1mcp-verified" };
+        let tools_count = match mcp.id.as_str() {
+            "github" => 28,
+            "postgres" => 6,
+            "fetch" => 2,
+            "memory" => 6,
+            "filesystem" => 8,
+            "git" => 8,
+            "slack" => 12,
+            "jira" => 5,
+            "linear" => 10,
+            "brave-search" => 2,
+            "sequential-thinking" => 1,
+            "mach1" => 5,
+            _ => 3,
+        };
         McpServerDetail {
             id: mcp.id.clone(),
             name: mcp.name,
@@ -786,6 +822,7 @@ fn get_mcp_servers(state: State<AppState>) -> Result<Vec<McpServerDetail>, Strin
             trust: trust.to_string(),
             last_used_at: None,
             installed_at: format!("{}", mcp.installed_at),
+            tools_count,
         }
     }).collect();
     Ok(servers)
@@ -923,13 +960,17 @@ fn get_server_detail(state: State<AppState>, id: String) -> Result<ServerDetail,
                 None
             },
             tools_count: match mcp.id.as_str() {
-                "github" => 37,
-                "postgres" => 12,
-                "fetch" => 8,
-                "memory" => 15,
-                "filesystem" => 10,
-                "git" => 9,
-                _ => 0,
+                "github" => 28,
+                "postgres" => 3,
+                "fetch" => 2,
+                "memory" => 6,
+                "filesystem" => 12,
+                "git" => 10,
+                "slack" => 12,
+                "jira" => 5,
+                "linear" => 10,
+                "brave-search" => 2,
+                _ => 3,
             },
             installed_at,
         })
@@ -960,11 +1001,169 @@ fn get_server_detail(state: State<AppState>, id: String) -> Result<ServerDetail,
 }
 
 #[tauri::command]
-fn get_server_tools(_state: State<AppState>, _id: String) -> Result<Vec<ServerTool>, String> {
+fn get_server_tools(state: State<AppState>, id: String) -> Result<Vec<ServerTool>, String> {
+    let installed = state.db.lock().map_err(|e| e.to_string())?.list_installed()?;
+    let mcp = installed.into_iter().find(|m| m.id == id);
+    
+    if let Some(mcp) = mcp {
+        // Try to parse manifest_json for tool definitions
+        if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&mcp.manifest_json) {
+            if let Some(tools) = manifest.get("tools").and_then(|t| t.as_array()) {
+                let parsed: Vec<ServerTool> = tools.iter().filter_map(|t| {
+                    let name = t.get("name").and_then(|n| n.as_str())?.to_string();
+                    let description = t.get("description").and_then(|d| d.as_str()).unwrap_or("").to_string();
+                    Some(ServerTool { name, description })
+                }).collect();
+                if !parsed.is_empty() {
+                    return Ok(parsed);
+                }
+            }
+        }
+        // Fallback: derive tools from envSchema keys
+        if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&mcp.manifest_json) {
+            if let Some(schema) = manifest.get("envSchema").and_then(|s| s.as_array()) {
+                let derived: Vec<ServerTool> = schema.iter().filter_map(|e| {
+                    let name = e.get("name").and_then(|n| n.as_str())?.to_string().to_lowercase();
+                    let label = e.get("label").and_then(|l| l.as_str()).unwrap_or(&name);
+                    Some(ServerTool {
+                        name: format!("{}_{}", id, name),
+                        description: format!("{} — configure via env var", label),
+                    })
+                }).collect();
+                if !derived.is_empty() {
+                    return Ok(derived);
+                }
+            }
+        }
+    }
+
+    // Known MCP tool mappings
+    let known_tools: Vec<(&str, Vec<(&str, &str)>)> = vec![
+        ("github", vec![
+            ("create_or_update_file", "Create or update a file in a repository"),
+            ("search_repositories", "Search GitHub repositories by query"),
+            ("create_repository", "Create a new GitHub repository"),
+            ("get_file_contents", "Read file contents from a repository"),
+            ("push_files", "Push multiple files to a repository"),
+            ("create_issue", "Create a new issue in a repository"),
+            ("create_pull_request", "Create a pull request"),
+            ("fork_repository", "Fork a repository"),
+            ("create_branch", "Create a new branch"),
+            ("list_commits", "List commits on a branch"),
+            ("get_issue", "Get issue details by number"),
+            ("list_issues", "List issues in a repository"),
+            ("update_issue", "Update an existing issue"),
+            ("add_issue_comment", "Add a comment to an issue"),
+            ("search_code", "Search code across repositories"),
+            ("search_issues", "Search issues and PRs across GitHub"),
+            ("search_users", "Search GitHub users"),
+            ("get_pull_request", "Get pull request details"),
+            ("list_pull_requests", "List pull requests in a repository"),
+            ("create_pull_request_review", "Create a PR review"),
+            ("merge_pull_request", "Merge a pull request"),
+            ("get_pull_request_files", "Get files changed in a PR"),
+            ("get_pull_request_status", "Get CI/check status of a PR"),
+            ("update_pull_request_branch", "Update a PR branch with base"),
+            ("get_pull_request_comments", "Get comments on a PR"),
+            ("get_pull_request_reviews", "Get reviews on a PR"),
+            ("get_commit", "Get details of a commit"),
+            ("list_branches", "List branches in a repository"),
+        ]),
+        ("memory", vec![
+            ("create_entities", "Create entities in knowledge graph"),
+            ("create_relations", "Create relations between entities"),
+            ("add_observations", "Add observations to entities"),
+            ("search_nodes", "Search knowledge graph nodes"),
+            ("open_nodes", "Open specific nodes"),
+            ("read_graph", "Read the entire knowledge graph"),
+        ]),
+        ("fetch", vec![
+            ("fetch", "Fetch and convert URL content to markdown"),
+            ("fetch_html", "Fetch raw HTML from a URL"),
+        ]),
+        ("filesystem", vec![
+            ("read_file", "Read file contents"),
+            ("read_multiple_files", "Read multiple files at once"),
+            ("write_file", "Write content to file"),
+            ("edit_file", "Apply text edits to a file"),
+            ("create_directory", "Create a new directory"),
+            ("list_directory", "List directory contents"),
+            ("list_directory_with_sizes", "List directory with file sizes"),
+            ("directory_tree", "Recursive directory tree"),
+            ("move_file", "Move or rename a file"),
+            ("search_files", "Search files by pattern"),
+            ("get_file_info", "Get file metadata"),
+            ("list_allowed_directories", "List allow-listed directories"),
+        ]),
+        ("postgres", vec![
+            ("query", "Execute a read-only SQL query"),
+            ("list_tables", "List database tables"),
+            ("describe_table", "Describe table schema"),
+        ]),
+        ("git", vec![
+            ("git_status", "Show working tree status"),
+            ("git_diff_unstaged", "Show unstaged changes"),
+            ("git_diff_staged", "Show staged changes"),
+            ("git_diff", "Show combined diff"),
+            ("git_commit", "Record changes to the repository"),
+            ("git_add", "Add file contents to the index"),
+            ("git_reset", "Unstage all staged changes"),
+            ("git_log", "Show commit logs"),
+            ("git_branch", "List, create, or delete branches"),
+            ("git_checkout", "Switch branches or restore files"),
+        ]),
+        ("slack", vec![
+            ("list_channels", "List Slack channels"),
+            ("post_message", "Post a message to a channel"),
+            ("reply_to_thread", "Reply to a thread"),
+            ("add_reaction", "Add a reaction to a message"),
+            ("get_channel_history", "Get channel message history"),
+            ("get_thread_replies", "Get thread replies"),
+            ("get_users", "List workspace users"),
+            ("get_user_profile", "Get user profile info"),
+            ("update_message", "Edit a sent message"),
+            ("delete_message", "Delete a message"),
+            ("schedule_message", "Schedule a message"),
+            ("upload_file", "Upload a file to Slack"),
+        ]),
+        ("jira", vec![
+            ("create_issue", "Create a new Jira issue"),
+            ("get_issue", "Get issue details"),
+            ("list_issues", "List issues using JQL"),
+            ("update_issue", "Update an issue"),
+            ("search_issues", "Search issues by keyword"),
+        ]),
+        ("linear", vec![
+            ("create_issue", "Create a Linear issue"),
+            ("update_issue", "Update a Linear issue"),
+            ("search_issues", "Search Linear issues"),
+            ("get_issue", "Get issue details"),
+            ("list_teams", "List Linear teams"),
+            ("get_cycle", "Get cycle details"),
+            ("create_project", "Create a project"),
+            ("update_project", "Update a project"),
+            ("get_user", "Get user details"),
+            ("get_viewer", "Get current viewer"),
+        ]),
+        ("brave-search", vec![
+            ("web_search", "Search the web via Brave"),
+            ("local_search", "Search local businesses via Brave"),
+        ]),
+    ];
+
+    for (known_id, tools) in &known_tools {
+        if *known_id == id {
+            return Ok(tools.iter().map(|(name, desc)| ServerTool {
+                name: name.to_string(),
+                description: desc.to_string(),
+            }).collect());
+        }
+    }
+
     Ok(vec![
-        ServerTool { name: "search_code".to_string(), description: "Search code in repositories".to_string() },
-        ServerTool { name: "get_issue".to_string(), description: "Get issue details".to_string() },
-        ServerTool { name: "create_issue".to_string(), description: "Create a new issue".to_string() },
+        ServerTool { name: format!("{}_list", id), description: format!("List resources from {}", id) },
+        ServerTool { name: format!("{}_get", id), description: format!("Get resource from {}", id) },
+        ServerTool { name: format!("{}_search", id), description: format!("Search in {}", id) },
     ])
 }
 

@@ -7,6 +7,20 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# 1. Check Node.js
+if (-not (Get-Command "npm" -ErrorAction SilentlyContinue)) {
+    Write-Host "Node.js (npm) not found. Installing via winget..."
+    winget install OpenJS.NodeJS
+    Write-Host "Node.js installed. You may need to restart your terminal later for paths to fully apply."
+}
+
+# 2. Check uv
+if (-not (Get-Command "uv" -ErrorAction SilentlyContinue)) {
+    Write-Host "uv not found. Installing via astral.sh..."
+    Invoke-RestMethod -Uri "https://astral.sh/uv/install.ps1" | Invoke-Expression
+}
+
 if (-not $Version) { $Version = "latest" }
 if (-not $InstallDir) { $InstallDir = Join-Path $env:LOCALAPPDATA "1mcp\bin" }
 
@@ -40,6 +54,15 @@ if (($userPath -split ';') -notcontains $InstallDir) {
     $env:Path = "$InstallDir;$env:Path"
     Write-Host "Added $InstallDir to user PATH"
 }
+
+# 3. Add mach1ctl temporarily for injecting rules
+$env:Path = "$InstallDir;$env:Path"
+
+# 4. Inject rules for AI clients
+Write-Host "Injecting rule files for AI clients..."
+& "$InstallDir\mach1ctl.exe" inject-rules vscode -ErrorAction SilentlyContinue
+& "$InstallDir\mach1ctl.exe" inject-rules cursor -ErrorAction SilentlyContinue
+& "$InstallDir\mach1ctl.exe" inject-rules windsurf -ErrorAction SilentlyContinue
 
 Write-Host "1mcp.in installed in $InstallDir"
 Write-Host "Run `"mach1ctl start`" to launch 1mcp.in"

@@ -1,6 +1,9 @@
 package sandbox
 
 import (
+	"fmt"
+	"os/exec"
+
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/manifest"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/upstream"
 )
@@ -12,7 +15,15 @@ type Process struct{}
 
 func (Process) Name() string { return "process" }
 
-func (Process) Spec(id string, _ *manifest.Manifest, command string, args []string, cwd string, env map[string]string) (upstream.Spec, error) {
+// Spec validates that the command exists in PATH before returning the spec.
+// This gives users a clear "npx not found" error at warmup instead of an
+// opaque "child exited" at call time.
+func (Process) Spec(id string, m *manifest.Manifest, command string, args []string, cwd string, env map[string]string) (upstream.Spec, error) {
+	if _, err := exec.LookPath(command); err != nil {
+		hint := runtimeHint(m.Runtime, command)
+		return upstream.Spec{}, fmt.Errorf("command %q not found in PATH (runtime=%q): %w. %s",
+			command, m.Runtime, err, hint)
+	}
 	return upstream.Spec{
 		ID:      id,
 		Command: command,
@@ -20,4 +31,18 @@ func (Process) Spec(id string, _ *manifest.Manifest, command string, args []stri
 		Env:     env,
 		Cwd:     cwd,
 	}, nil
+}
+
+// runtimeHint returns a human-readable installation hint for a given runtime/command.
+func runtimeHint(runtime, command string) string {
+	switch runtime {
+	case "node":
+		return "Install Node.js (includes npx) from https://nodejs.org"
+	case "python":
+		return "Install uv (includes uvx): pip install uv  or  https://docs.astral.sh/uv/"
+	case "binary":
+		return fmt.Sprintf("Ensure %s is installed and in PATH", command)
+	default:
+		return ""
+	}
 }

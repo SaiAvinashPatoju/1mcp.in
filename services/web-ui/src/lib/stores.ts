@@ -100,7 +100,9 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '0.6.2', runtime: 'node', author: 'Anthropic',
 		tags: ['github', 'git', 'issues', 'official'],
 		rating: 4.9, reviewCount: 634, downloads: 92800,
-		verificationStatus: 'anthropic-official', publishedAt: '2024-11-05', installed: true, patProvider: 'github'
+		verificationStatus: 'anthropic-official', publishedAt: '2024-11-05', installed: true, patProvider: 'github',
+		requires_env: ['GITHUB_PERSONAL_ACCESS_TOKEN'],
+		homepage: 'https://github.com/modelcontextprotocol/servers'
 	},
 	{
 		id: 'memory', name: 'Knowledge Graph Memory',
@@ -108,7 +110,8 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '0.6.0', runtime: 'node', author: 'Anthropic',
 		tags: ['memory', 'knowledge-graph', 'official'],
 		rating: 4.9, reviewCount: 521, downloads: 78300,
-		verificationStatus: 'anthropic-official', publishedAt: '2024-10-15', installed: true
+		verificationStatus: 'anthropic-official', publishedAt: '2024-10-15', installed: true,
+		homepage: 'https://github.com/modelcontextprotocol/servers'
 	},
 	{
 		id: 'filesystem', name: 'Filesystem',
@@ -116,7 +119,8 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '0.6.2', runtime: 'node', author: 'Anthropic',
 		tags: ['filesystem', 'files', 'official'],
 		rating: 4.8, reviewCount: 312, downloads: 45200,
-		verificationStatus: 'anthropic-official', publishedAt: '2024-11-01', installed: false
+		verificationStatus: 'anthropic-official', publishedAt: '2024-11-01', installed: false,
+		requires_env: ['MACH1_FS_ROOT']
 	},
 	{
 		id: 'fetch', name: 'Fetch',
@@ -132,7 +136,8 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '0.6.0', runtime: 'python', author: 'Anthropic',
 		tags: ['git', 'vcs', 'official'],
 		rating: 4.6, reviewCount: 143, downloads: 22100,
-		verificationStatus: 'anthropic-official', publishedAt: '2024-10-25', installed: false
+		verificationStatus: 'anthropic-official', publishedAt: '2024-10-25', installed: false,
+		requires_env: ['MACH1_GIT_REPO']
 	},
 	{
 		id: 'postgres', name: 'PostgreSQL',
@@ -140,7 +145,8 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '1.0.0', runtime: 'node', author: 'db-tools',
 		tags: ['database', 'postgres', 'sql'],
 		rating: 4.5, reviewCount: 119, downloads: 17600,
-		verificationStatus: '1mcp.in-verified', publishedAt: '2025-02-10', installed: false
+		verificationStatus: '1mcp.in-verified', publishedAt: '2025-02-10', installed: false,
+		requires_env: ['POSTGRES_CONNECTION_STRING']
 	},
 	{
 		id: 'slack', name: 'Slack',
@@ -148,7 +154,8 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '1.2.0', runtime: 'node', author: 'community',
 		tags: ['slack', 'messaging', 'communication'],
 		rating: 4.2, reviewCount: 87, downloads: 9400,
-		verificationStatus: 'community', publishedAt: '2025-01-12', installed: false
+		verificationStatus: 'community', publishedAt: '2025-01-12', installed: false,
+		requires_env: ['SLACK_BOT_TOKEN', 'SLACK_TEAM_ID']
 	},
 	{
 		id: 'jira', name: 'Jira',
@@ -156,7 +163,8 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		version: '0.9.1', runtime: 'python', author: 'atlassian-community',
 		tags: ['jira', 'project-management', 'atlassian'],
 		rating: 3.8, reviewCount: 52, downloads: 6100,
-		verificationStatus: 'pending', publishedAt: '2025-03-01', installed: false
+		verificationStatus: 'pending', publishedAt: '2025-03-01', installed: false,
+		requires_env: ['JIRA_BASE_URL', 'JIRA_USER_EMAIL', 'JIRA_API_TOKEN']
 	},
 	{
 		id: 'linear', name: 'Linear',
@@ -165,7 +173,8 @@ export const marketplace = writable<MarketplaceMcp[]>([
 		tags: ['linear', 'project-management', 'issues'],
 		rating: 4.1, reviewCount: 38, downloads: 4200,
 		verificationStatus: 'community', publishedAt: '2025-04-01', installed: false,
-		patProvider: 'linear'
+		patProvider: 'linear',
+		requires_env: ['LINEAR_API_KEY']
 	}
 ]);
 
@@ -344,6 +353,81 @@ function syncInstalledMarketplaceFlags(installedIds: Set<string>) {
 	);
 }
 
+/** Heuristic auto-detector for env requirements.
+ *  Checks: explicit requires_env → patProvider mapping → keyword heuristics on name/description/tags. */
+function detectRequiredEnv(mcp: {
+	id: string;
+	name: string;
+	shortDescription?: string;
+	tags?: string[];
+	patProvider?: string;
+	requires_env?: string[];
+}): string[] {
+	// 1. Explicit requires_env (non-empty) wins
+	if (mcp.requires_env && mcp.requires_env.length > 0) return mcp.requires_env;
+
+	// 2. patProvider mapping
+	const patEnvMap: Record<string, string[]> = {
+		github: ['GITHUB_PERSONAL_ACCESS_TOKEN'],
+		gitlab: ['GITLAB_PERSONAL_ACCESS_TOKEN'],
+		linear: ['LINEAR_API_KEY'],
+	};
+	if (mcp.patProvider && patEnvMap[mcp.patProvider]) {
+		return patEnvMap[mcp.patProvider];
+	}
+
+	// 3. Keyword heuristics — scan name, description, tags
+	const haystack = `${mcp.name || ''} ${mcp.shortDescription || ''} ${(mcp.tags ?? []).join(' ')}`.toLowerCase();
+
+	const servicePatterns: Array<{ keys: string[]; env: string[] }> = [
+		{ keys: ['github', 'gh '], env: ['GITHUB_PERSONAL_ACCESS_TOKEN'] },
+		{ keys: ['gitlab', 'gl '], env: ['GITLAB_PERSONAL_ACCESS_TOKEN'] },
+		{ keys: ['linear'], env: ['LINEAR_API_KEY'] },
+		{ keys: ['slack'], env: ['SLACK_BOT_TOKEN', 'SLACK_TEAM_ID'] },
+		{ keys: ['jira', 'atlassian'], env: ['JIRA_BASE_URL', 'JIRA_USER_EMAIL', 'JIRA_API_TOKEN'] },
+		{ keys: ['postgres', 'postgresql', 'pg_'], env: ['POSTGRES_CONNECTION_STRING'] },
+		{ keys: ['notion'], env: ['NOTION_API_KEY'] },
+		{ keys: ['hubspot'], env: ['HUBSPOT_API_KEY'] },
+		{ keys: ['stripe'], env: ['STRIPE_API_KEY'] },
+		{ keys: ['salesforce'], env: ['SALESFORCE_CLIENT_ID', 'SALESFORCE_CLIENT_SECRET'] },
+		{ keys: ['aws', 'amazon'], env: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'] },
+		{ keys: ['gcp', 'google cloud'], env: ['GOOGLE_APPLICATION_CREDENTIALS'] },
+		{ keys: ['azure'], env: ['AZURE_API_KEY'] },
+		{ keys: ['brave', 'brave search'], env: ['BRAVE_API_KEY'] },
+		{ keys: ['serpapi', 'google search'], env: ['SERPAPI_API_KEY'] },
+		{ keys: ['openai', 'chatgpt'], env: ['OPENAI_API_KEY'] },
+		{ keys: ['anthropic', 'claude'], env: ['ANTHROPIC_API_KEY'] },
+		{ keys: ['figma'], env: ['FIGMA_ACCESS_TOKEN'] },
+		{ keys: ['docker', 'dockerhub'], env: ['DOCKER_HUB_TOKEN'] },
+		{ keys: ['sentry'], env: ['SENTRY_AUTH_TOKEN'] },
+		{ keys: ['datadog'], env: ['DATADOG_API_KEY', 'DATADOG_APP_KEY'] },
+		{ keys: ['sendgrid', 'mail'], env: ['SENDGRID_API_KEY'] },
+		{ keys: ['twilio'], env: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN'] },
+		{ keys: ['airtable'], env: ['AIRTABLE_API_KEY'] },
+		{ keys: ['asana'], env: ['ASANA_PERSONAL_ACCESS_TOKEN'] },
+		{ keys: ['pagerduty'], env: ['PAGERDUTY_API_KEY'] },
+		{ keys: ['vercel'], env: ['VERCEL_TOKEN'] },
+		{ keys: ['netlify'], env: ['NETLIFY_AUTH_TOKEN'] },
+		{ keys: ['railway'], env: ['RAILWAY_API_KEY'] },
+		{ keys: ['discord'], env: ['DISCORD_BOT_TOKEN'] },
+		{ keys: ['telegram'], env: ['TELEGRAM_BOT_TOKEN'] },
+		{ keys: ['google sheets', 'google_sheets'], env: ['GOOGLE_SHEETS_API_KEY'] },
+		{ keys: ['google drive', 'google_drive'], env: ['GOOGLE_DRIVE_API_KEY'] },
+		{ keys: ['gmail'], env: ['GMAIL_APP_PASSWORD'] },
+		{ keys: ['calendar', 'google calendar'], env: ['GOOGLE_CALENDAR_API_KEY'] },
+		// Generic patterns — only match if we haven't found anything above
+		{ keys: ['api_key', 'apikey', 'api token', 'bearer token', 'pat', 'personal access'], env: ['API_KEY'] },
+	];
+
+	for (const { keys, env } of servicePatterns) {
+		if (keys.some(k => haystack.includes(k))) {
+			return env;
+		}
+	}
+
+	return [];
+}
+
 // ── Marketplace sync from API ──
 
 /** Fetch the marketplace catalog from the cloud API. If running inside Tauri,
@@ -373,6 +457,13 @@ export async function fetchMarketplace() {
 
 			for (const apiItem of apiItems) {
 				const existing = byId.get(apiItem.id);
+				// Restore persisted install count from localStorage
+				let persistedDownloads: number | undefined;
+				try {
+					const key = `mcp_installs_${apiItem.id}`;
+					const stored = localStorage.getItem(key);
+					if (stored) persistedDownloads = parseInt(stored, 10);
+				} catch { /* ignore */ }
 				merged.push({
 					...(existing ?? {
 						rating: 4.5,
@@ -394,6 +485,19 @@ export async function fetchMarketplace() {
 					sha256: apiItem.sha256,
 					signature: apiItem.signature,
 					entrypoint: apiItem.entrypoint,
+					homepage: apiItem.homepage ?? existing?.homepage,
+					patProvider: existing?.patProvider,
+					requires_env: apiItem.requires_env?.length
+						? apiItem.requires_env
+						: detectRequiredEnv({
+							id: apiItem.id,
+							name: apiItem.name,
+							shortDescription: apiItem.description,
+							tags: apiItem.tags,
+							patProvider: existing?.patProvider,
+							requires_env: existing?.requires_env,
+						}),
+					downloads: persistedDownloads ?? existing?.downloads ?? 0,
 				});
 				byId.delete(apiItem.id); // mark as processed
 			}
@@ -519,6 +623,19 @@ export async function installMcp(id: string) {
 			patProvider: mcp.patProvider
 		}
 	]);
+	// Increment install counter in marketplace
+	marketplace.update((list) =>
+		list.map((m) =>
+			m.id === id ? { ...m, downloads: m.downloads + 1 } : m
+		)
+	);
+	// Persist install count to localStorage
+	try {
+		const key = `mcp_installs_${id}`;
+		const stored = localStorage.getItem(key);
+		const count = (stored ? parseInt(stored, 10) : mcp.downloads) + 1;
+		localStorage.setItem(key, count.toString());
+	} catch { /* localStorage unavailable */ }
 	syncInstalledMarketplaceFlags(new Set(get(installed).map((installedMcp) => installedMcp.id)));
 	if (isTauri) {
 		try {
@@ -526,6 +643,12 @@ export async function installMcp(id: string) {
 			if (newMcp) await invokeDesktop('install_mcp', { mcp: newMcp });
 		} catch {
 			installed.set(prevInstalled);
+			// Revert install count
+			marketplace.update((list) =>
+				list.map((m) =>
+					m.id === id ? { ...m, downloads: m.downloads - 1 } : m
+				)
+			);
 			syncInstalledMarketplaceFlags(new Set(prevInstalled.map((m) => m.id)));
 		}
 	}
@@ -992,12 +1115,21 @@ export async function fetchServerDetail(id: string) {
 
 export async function fetchServerTools(id: string) {
 	try {
+		let tools: ServerTool[] = [];
 		if (isTauri) {
-			serverTools.set(await invokeDesktop<ServerTool[]>('get_server_tools', { id }));
-			return;
+			tools = await invokeDesktop<ServerTool[]>('get_server_tools', { id });
+		} else {
+			const res = await fetch(`${API_URL}/api/servers/${id}/tools`);
+			if (res.ok) tools = await res.json();
 		}
-		const res = await fetch(`${API_URL}/api/servers/${id}/tools`);
-		if (res.ok) serverTools.set(await res.json());
+		serverTools.set(tools);
+		// Sync tools_count into both mcpServers and serverDetail
+		mcpServers.update(list => list.map(s =>
+			s.id === id ? { ...s, tools_count: tools.length } : s
+		));
+		serverDetail.update(detail =>
+			detail && detail.id === id ? { ...detail, tools_count: tools.length } : detail
+		);
 	} catch {
 		// keep defaults
 	}
@@ -1116,14 +1248,25 @@ export async function fetchMarketplaceItemDetail(id: string) {
 				sha256: apiItem.sha256 ?? '',
 				verified_at: apiItem.publishedAt ?? '',
 				updated_at: apiItem.publishedAt ?? '',
-				downloads: apiItem.downloads ?? 0,
+				downloads: Math.max(apiItem.downloads ?? 0, localItem?.downloads ?? 0),
 				rating: apiItem.rating ?? 0,
 				reviewCount: apiItem.reviewCount ?? 0,
 				tags: apiItem.tags ?? [],
 				installed: localItem?.installed ?? false,
 				capabilities: apiItem.tags ?? [],
 				security_checks: (apiItem.security_checks as { label: string; status: 'passed' | 'warning' | 'failed' }[] | undefined) ?? deriveSecurityChecks(apiItem.verification ?? 'community'),
-				requires_env: apiItem.requires_env ?? (localItem?.patProvider ? [`${localItem.patProvider.toUpperCase()}_TOKEN`] : [])
+				requires_env: apiItem.requires_env?.length
+					? apiItem.requires_env
+					: detectRequiredEnv({
+						id: apiItem.id,
+						name: apiItem.name,
+						shortDescription: apiItem.description,
+						tags: apiItem.tags,
+						patProvider: localItem?.patProvider,
+						requires_env: localItem?.requires_env,
+					}),
+				homepage: apiItem.homepage ?? localItem?.homepage,
+				patProvider: localItem?.patProvider
 			});
 			return;
 		}
@@ -1148,7 +1291,16 @@ export async function fetchMarketplaceItemDetail(id: string) {
 				installed: localItem.installed,
 				capabilities: localItem.tags,
 				security_checks: deriveSecurityChecks(localItem.verificationStatus),
-				requires_env: localItem.patProvider ? [`${localItem.patProvider.toUpperCase()}_TOKEN`] : []
+				requires_env: detectRequiredEnv({
+					id: localItem.id,
+					name: localItem.name,
+					shortDescription: localItem.shortDescription,
+					tags: localItem.tags,
+					patProvider: localItem.patProvider,
+					requires_env: localItem.requires_env,
+				}),
+				homepage: localItem.homepage,
+				patProvider: localItem.patProvider
 			});
 		}
 	} catch {

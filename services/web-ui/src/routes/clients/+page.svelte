@@ -114,7 +114,7 @@
 	$: filtered = (() => {
 		let result = [...$clients];
 		if (activeTab === 'supported') {
-			result = result.filter((c) => ['vscode', 'cursor', 'claude', 'claudecode', 'windsurf', 'codex', 'opencode'].includes(c.id));
+			result = result.filter((c) => ['vscode', 'cursor', 'claude', 'claudecode', 'windsurf', 'codex', 'antigravity', 'opencode'].includes(c.id));
 		}
 		if (query.trim()) {
 			const q = query.toLowerCase();
@@ -518,5 +518,8 @@
 	.animate-marquee {
 		display: inline-block;
 		animation: marquee 20s linear infinite;
+	}
+	select {
+		color-scheme: dark;
 	}
 </style>

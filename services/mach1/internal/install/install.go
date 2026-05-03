@@ -10,6 +10,10 @@
 //
 // The trade-off is fast installs; the cost is first-run latency. Phase 5's
 // supervisor offsets this with a "warming" notification in the hub UI.
+//
+// Unlike the original design, install.go now also checks runtime prerequisites
+// (npx for node, uvx for python) and attempts to auto-install missing runners
+// so users never see a opaque "child exited" error at startup.
 package install
 
 import (
@@ -23,6 +27,83 @@ import (
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/manifest"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/registry"
 )
+
+// runnerForRuntime maps MCP runtimes to the CLI tool that resolves deps.
+func runnerForRuntime(runtime string) string {
+	switch runtime {
+	case "node":
+		return "npx"
+	case "python":
+		return "uvx"
+	case "docker":
+		return "docker"
+	default:
+		return ""
+	}
+}
+
+// runnerInstallHint returns a human-readable install command for a runner.
+func runnerInstallHint(runner string) string {
+	switch runner {
+	case "npx":
+		return "Install Node.js (includes npm/npx) from https://nodejs.org"
+	case "uvx":
+		return "Install uv (includes uvx): pip install uv  (or  curl -LsSf https://astral.sh/uv/install.sh | sh)"
+	case "docker":
+		return "Install Docker from https://docker.com"
+	default:
+		return ""
+	}
+}
+
+// EnsureRuntimeRunner checks that the runner for a given runtime exists in
+// PATH. For `python` runtime it attempts to auto-install uv if uvx is missing.
+// Returns a clear actionable error if the runner cannot be resolved.
+func EnsureRuntimeRunner(ctx context.Context, runtime string, logger *slog.Logger) error {
+	runner := runnerForRuntime(runtime)
+	if runner == "" {
+		return nil // unknown runtime, skip check
+	}
+	_, err := exec.LookPath(runner)
+	if err == nil {
+		return nil
+	}
+
+	// Python: try to auto-install uv via pip.
+	if runtime == "python" {
+		if logger != nil {
+			logger.Info("uvx not found; attempting pip install uv")
+		}
+		pipPath, pipErr := exec.LookPath("pip")
+		if pipErr == nil {
+			installCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(installCtx, pipPath, "install", "uv")
+			if out, pErr := cmd.CombinedOutput(); pErr == nil {
+				// Verify uvx is now available.
+				if _, lpErr := exec.LookPath("uvx"); lpErr == nil {
+					if logger != nil {
+						logger.Info("uv installed via pip")
+					}
+					return nil
+				}
+				if logger != nil {
+					logger.Warn("pip install uv succeeded but uvx still not in PATH", "output", string(out))
+				}
+			} else {
+				if logger != nil {
+					logger.Warn("pip install uv failed", "err", pErr, "output", truncate(string(out), 256))
+				}
+			}
+		} else {
+			if logger != nil {
+				logger.Warn("pip not found either; cannot auto-install uv", "err", pipErr)
+			}
+		}
+	}
+
+	return fmt.Errorf("%s not found in PATH. %s", runner, runnerInstallHint(runner))
+}
 
 // Result reports what happened during an install (for CLI/UI display).
 type Result struct {
@@ -62,6 +143,11 @@ func (i *Installer) Install(ctx context.Context, m *manifest.Manifest) (*Result,
 	}
 
 	res := &Result{ID: m.ID, Already: already, Verification: m.Verification}
+
+	// Ensure runtime runner exists. For python, auto-install uv if missing.
+	if err := EnsureRuntimeRunner(ctx, m.Runtime, i.Logger); err != nil {
+		return nil, fmt.Errorf("runtime prerequisite: %w", err)
+	}
 
 	// Docker pre-pull, best-effort.
 	if m.Runtime == "docker" {

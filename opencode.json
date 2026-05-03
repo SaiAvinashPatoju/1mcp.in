@@ -19,14 +19,6 @@
     "prune": true,
     "reserved": 10000
   },
-  "mcp": {
-    "mach1": {
-      "type": "local",
-      "command": ["C:\\projects\\work\\1Mcp\\bin\\mach1.exe", "-config", "C:\\projects\\work\\1Mcp\\mach1-dev-config.json", "-log", "warn", "-catalog", "C:\\projects\\work\\1Mcp\\packages\\registry-index\\index.json"],
-      "description": "mach1 — the single MCP brain. Routes ALL upstream MCP calls (GitHub, Brave Search, Memory, Fetch, Sequential Thinking, Retix Vision, etc.) through one router. All tools are namespaced as <mcp_id>__<tool_name>. Also exposes mach1_* meta-tools for MCP lifecycle management.",
-      "enabled": true
-    }
-  },
   "agent": {
     "go-architect": {
       "mode": "subagent",

@@ -1,6 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 1. Check Node.js
+if ! command -v node >/dev/null 2>&1; then
+    OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    if [ "$OS" = "darwin" ]; then
+        echo "Node.js not found. Installing via Homebrew..."
+        if ! command -v brew >/dev/null 2>&1; then
+            echo "Homebrew not found. Please install Homebrew or Node manually."
+            exit 1
+        fi
+        brew install node
+    else
+        echo "Node.js not found. Please install Node.js manually, or via nvm/apt/yum etc."
+    fi
+fi
+
+# 2. Check uv
+if ! command -v uv >/dev/null 2>&1; then
+    echo "uv not found. Installing via astral.sh..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
+fi
+
 OWNER="${MACH1_GITHUB_OWNER:-SaiAvinashPatoju}"
 REPO="${MACH1_GITHUB_REPO:-1mcp.in}"
 VERSION="${MACH1_VERSION:-latest}"
@@ -53,6 +75,20 @@ case ":${PATH}:" in
     echo "Added ${INSTALL_DIR} to PATH in ${SHELL_RC}"
     ;;
 esac
+
+export PATH="${INSTALL_DIR}:$PATH"
+
+# 4. Inject Rules
+echo "Injecting rule files for AI clients..."
+if command -v mach1ctl >/dev/null 2>&1; then
+    mach1ctl inject-rules vscode || true
+    mach1ctl inject-rules cursor || true
+    mach1ctl inject-rules windsurf || true
+else
+    "${INSTALL_DIR}/mach1ctl" inject-rules vscode || true
+    "${INSTALL_DIR}/mach1ctl" inject-rules cursor || true
+    "${INSTALL_DIR}/mach1ctl" inject-rules windsurf || true
+fi
 
 echo "1mcp.in installed in ${INSTALL_DIR}"
 echo "Run \`mach1ctl start\` to launch 1mcp.in"

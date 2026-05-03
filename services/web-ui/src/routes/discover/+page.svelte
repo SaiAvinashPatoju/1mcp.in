@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { toast } from '$lib/toast';
 	import {
 		marketplace,
@@ -18,10 +19,13 @@
 		selectedMarketplaceItem,
 		marketplaceItemDetail,
 		selectMarketplaceItem,
-		setMcpEnv
+		setMcpEnv,
+		autoDetectEnv,
+		fetchMarketplaceItemDetail
 	} from '$lib/stores';
 	import { user } from '$lib/auth';
 	import PublishModal from '$lib/components/PublishModal.svelte';
+	import EnvSetupModal from '$lib/components/EnvSetupModal.svelte';
 
 	type Tab = 'mcps' | 'skills' | 'bundles';
 	type SortOption = 'downloads' | 'rating' | 'newest';
@@ -37,9 +41,17 @@
 	let statusFilter: StatusFilter = 'all';
 	let showPublish = false;
 	let actionLoading = false;
-	let apiKeyInputs: Record<string, string> = {};
+	let envInputs: Record<string, string> = {};
+	let envVisible: Record<string, boolean> = {};
+	let envConfigured: Record<string, boolean> = {};
 	let currentPage = 1;
 	const pageSize = 8;
+
+	// Env setup modal state
+	let showEnvModal = false;
+	let envModalMcpId = '';
+	let envModalMcpName = '';
+	let envModalRequiredEnv: string[] = [];
 
 	onMount(async () => {
 		await fetchInstalled();
@@ -92,6 +104,19 @@
 
 	function statusText(installed: boolean): string {
 		return installed ? 'Installed' : 'Available';
+	}
+
+	function cleanAuthor(author: string): string {
+		try {
+			const u = new URL(author);
+			if (u.hostname) {
+				const parts = u.pathname.replace(/^\//, '').replace(/\.git$/, '').split('/');
+				return parts.slice(0, 2).join('/');
+			}
+		} catch {
+			// not a URL
+		}
+		return author;
 	}
 
 	$: filteredMcps = (() => {
@@ -159,8 +184,17 @@
 		actionLoading = true;
 		try {
 			await installMcp(id);
-			if ($selectedMarketplaceItem === id) {
-				selectMarketplaceItem(id);
+			// Auto-select the item to show detail view
+			selectMarketplaceItem(id);
+			// Refresh the detail to get updated installed status
+			await fetchMarketplaceItemDetail(id);
+			// Show env setup modal if required
+			const detail = $marketplaceItemDetail;
+			if (detail?.requires_env && detail.requires_env.length > 0) {
+				envModalMcpId = id;
+				envModalMcpName = detail.name;
+				envModalRequiredEnv = detail.requires_env;
+				showEnvModal = true;
 			}
 		} finally {
 			actionLoading = false;
@@ -302,12 +336,20 @@
 												{mcp.name.charAt(0)}
 											</div>
 											<div>
-												<p class="text-white/80 font-medium">{mcp.name}</p>
+												<div class="flex items-center gap-2">
+													<p class="text-white/80 font-medium">{mcp.name}</p>
+													{#if mcp.requires_env && mcp.requires_env.length > 0}
+														<span class="px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20" title="Requires API token: {mcp.requires_env.join(', ')}">
+															<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="inline -mt-0.5 mr-0.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+															API Key
+														</span>
+													{/if}
+												</div>
 												<p class="text-[10px] text-white/25 truncate max-w-[240px]">{mcp.shortDescription}</p>
 											</div>
 										</div>
 									</td>
-									<td class="text-white/50">{mcp.author}</td>
+									<td class="text-white/50">{cleanAuthor(mcp.author)}</td>
 									<td>
 										<span class="px-2 py-0.5 rounded text-[10px] font-medium {runtimeClass(mcp.runtime)}">{mcp.runtime}</span>
 									</td>
@@ -380,7 +422,7 @@
 						</div>
 					{/if}
 				</div>
-			{:else}
+			{:else if activeTab === 'skills'}
 				<!-- Skills tab -->
 				<div class="flex items-center gap-3 mb-6">
 					<div class="relative flex-1 max-w-sm">
@@ -465,7 +507,7 @@
 						</div>
 						<div>
 							<h3 class="text-sm font-bold text-white/90">{$marketplaceItemDetail.name}</h3>
-							<p class="text-[11px] text-white/30">by {$marketplaceItemDetail.author}</p>
+							<p class="text-[11px] text-white/30">by {cleanAuthor($marketplaceItemDetail.author)}</p>
 						</div>
 					</div>
 					<div class="flex items-center gap-2">
@@ -573,34 +615,85 @@
 					{/each}
 				</div>
 
-				<!-- API Key / Auth -->
-				{#if $marketplaceItemDetail.installed && $marketplaceItemDetail.requires_env.length > 0}
+				<!-- Environment Variables (Local Storage) -->
+				{#if $marketplaceItemDetail.installed && $marketplaceItemDetail.requires_env && $marketplaceItemDetail.requires_env.length > 0}
 					<div class="rounded-lg bg-white/[0.02] border border-white/[0.06] p-4 space-y-3">
-						<h4 class="text-xs font-medium text-white/70">Authentication</h4>
+						<div class="flex items-center justify-between">
+							<h4 class="text-xs font-medium text-white/70">Environment Variables</h4>
+							<span class="text-[9px] text-white/20">stored locally</span>
+						</div>
 						{#each $marketplaceItemDetail.requires_env as envKey}
-							<div class="flex gap-2">
-								<input
-									value={apiKeyInputs[envKey] ?? ''}
-									on:input={(e) => { apiKeyInputs[envKey] = (e.target as HTMLInputElement).value; }}
-									placeholder={`Enter ${envKey}...`}
-									type="password"
-									class="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-1.5 text-xs text-white/80 placeholder-white/20 focus:outline-none focus:border-orange-500/30"
-								/>
-								<button
-									on:click={async () => {
-										const val = apiKeyInputs[envKey];
-										if (val) {
-											await setMcpEnv($marketplaceItemDetail.id, { [envKey]: val });
-											toast.success(`${envKey} saved`);
-											apiKeyInputs[envKey] = '';
-										}
-									}}
-									class="px-3 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-400 hover:bg-orange-500/20 transition-colors"
-								>
-									Save
-								</button>
+							<div class="space-y-1.5">
+								<div class="flex items-center gap-1">
+									<span class="text-[10px] text-white/40 font-mono">{envKey}</span>
+									{#if envConfigured[envKey]}
+										<span class="text-[9px] text-emerald-400">Saved</span>
+									{/if}
+								</div>
+								<div class="flex gap-2">
+									<div class="relative flex-1">
+										<input
+											value={envInputs[envKey] ?? ''}
+											on:input={(e) => { envInputs[envKey] = (e.target as HTMLInputElement).value; }}
+											placeholder="Enter value..."
+											type={envVisible[envKey] ? 'text' : 'password'}
+											class="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg pl-3 pr-8 py-1.5 text-xs text-white/80 placeholder-white/20 focus:outline-none focus:border-orange-500/30"
+										/>
+										<button
+											on:click={() => { envVisible[envKey] = !envVisible[envKey]; }}
+											class="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+											aria-label={envVisible[envKey] ? 'Hide token' : 'Show token'}
+										>
+											{#if envVisible[envKey]}
+												<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+											{:else}
+												<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+											{/if}
+										</button>
+									</div>
+									<button
+										on:click={async () => {
+											const val = envInputs[envKey];
+											if (!val) return;
+											try {
+												await setMcpEnv($marketplaceItemDetail.id, { [envKey]: val });
+												envConfigured[envKey] = true;
+												toast.success(`${envKey} saved`);
+												envInputs[envKey] = '';
+											} catch {
+												toast.error(`Failed to save ${envKey}`);
+											}
+										}}
+										class="px-3 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-400 hover:bg-orange-500/20 transition-colors"
+									>
+										Save
+									</button>
+								</div>
 							</div>
 						{/each}
+						{#if $marketplaceItemDetail.patProvider}
+							<button
+								on:click={async () => {
+									try {
+										const detected = await autoDetectEnv($marketplaceItemDetail.id);
+										const keys = Object.keys(detected);
+										if (keys.length > 0) {
+											await setMcpEnv($marketplaceItemDetail.id, detected);
+											for (const k of keys) envConfigured[k] = true;
+											toast.success(`Auto-detected ${keys.join(', ')}`);
+										} else {
+											toast.info('No tokens found to auto-detect');
+										}
+									} catch { toast.error('Auto-detect failed'); }
+								}}
+								class="w-full text-[11px] text-orange-400/60 hover:text-orange-400 transition-colors"
+							>
+								Auto-detect token from local config
+							</button>
+						{/if}
+						<button on:click={() => goto('/servers')} class="w-full text-[11px] text-white/30 hover:text-white/50 transition-colors">
+							Open full server config →
+						</button>
 					</div>
 				{/if}
 
@@ -617,9 +710,9 @@
 							Install
 						</button>
 					{/if}
-					<button on:click={() => toast.info('Environment configuration available in desktop app')} class="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-xs text-white/60 hover:text-white/90 hover:bg-white/[0.06] transition-colors">
+				<button on:click={() => goto('/servers')} class="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-xs text-white/60 hover:text-white/90 hover:bg-white/[0.06] transition-colors">
 						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-						Configure ENV
+						Manage Server Settings
 					</button>
 					<button on:click={() => toast.info('Manifest view coming soon')} class="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-xs text-white/60 hover:text-white/90 hover:bg-white/[0.06] transition-colors">
 						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
@@ -634,3 +727,22 @@
 {#if showPublish}
 	<PublishModal onClose={() => (showPublish = false)} onPublish={handlePublish} />
 {/if}
+
+<EnvSetupModal
+	bind:show={showEnvModal}
+	mcpId={envModalMcpId}
+	mcpName={envModalMcpName}
+	requiredEnv={envModalRequiredEnv}
+	on:complete={() => {
+		showEnvModal = false;
+		// Refresh installed list to show updated status
+		fetchInstalled();
+	}}
+	on:skip={() => {
+		showEnvModal = false;
+		toast.info('You can configure credentials later in the server settings');
+	}}
+/>
+
+<style>
+</style>

@@ -49,6 +49,8 @@ export interface MarketplaceMcp {
 	installed: boolean;
 	entrypoint?: MarketplaceEntrypoint;
 	patProvider?: PatProvider;
+	requires_env?: string[];
+	homepage?: string;
 }
 
 export interface Skill {
@@ -174,6 +176,8 @@ export interface MarketplaceItemDetail {
 	capabilities: string[];
 	security_checks: { label: string; status: 'passed' | 'warning' | 'failed' }[];
 	requires_env: string[];
+	patProvider?: PatProvider;
+	homepage?: string;
 }
 
 export interface ServerProcessInfo {
