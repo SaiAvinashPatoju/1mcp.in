@@ -19,6 +19,7 @@ import (
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/proto"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/security"
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/supervisor"
+	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/version"
 )
 
 // Server speaks MCP over stdio to a single client.
@@ -101,7 +102,7 @@ func (s *Server) handleRequest(ctx context.Context, msg *proto.Message) *proto.M
 	case "initialize":
 		resp := s.ok(msg.ID, proto.InitializeResult{
 			ProtocolVersion: proto.ProtocolVersion,
-			ServerInfo:      proto.Implementation{Name: "mach1", Version: "0.3.4"},
+			ServerInfo:      proto.Implementation{Name: "mach1", Version: version.Version},
 			Capabilities: proto.ServerCapabilities{
 				Tools: &proto.ToolsCapability{ListChanged: false},
 			},

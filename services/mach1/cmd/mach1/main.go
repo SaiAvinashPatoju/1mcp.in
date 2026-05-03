@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -33,6 +34,9 @@ import (
 	"github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/supervisor"
 	transporthttp "github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/transport"
 )
+
+//go:embed catalog.json
+var embeddedCatalogJSON []byte
 
 // fileConfig is the dev-mode JSON config: a flat list of inline manifests
 // useful for tests. Production loads from SQLite via the hub/CLI.
@@ -96,6 +100,14 @@ func main() {
 				catalogEntries = c
 				break
 			}
+		}
+	}
+	if len(catalogEntries) == 0 && len(embeddedCatalogJSON) > 2 {
+		if c, err := catalog.LoadBytes(embeddedCatalogJSON); err == nil {
+			catalogEntries = c
+			logger.Info("loaded catalog from embedded data", "entries", len(catalogEntries))
+		} else {
+			logger.Warn("embedded catalog parse failed", "err", err)
 		}
 	}
 

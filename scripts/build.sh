@@ -14,10 +14,12 @@ if ! command -v go >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Syncing registry-index and skills into API embed dir..."
-cp "${REPO_ROOT}/packages/registry-index/index.json" "${SERVICE_DIR}/cmd/mcpapiserver/registry-index.json"
-if [ ! -f "${SERVICE_DIR}/cmd/mcpapiserver/skills.json" ]; then
-  echo '[]' > "${SERVICE_DIR}/cmd/mcpapiserver/skills.json"
+export CGO_ENABLED=0
+
+# Derive version from latest git tag, or "dev" if not in a git repo.
+VERSION="dev"
+if tag=$(git describe --tags --abbrev=0 2>/dev/null); then
+  VERSION="$tag"
 fi
 
 echo "Building mach1 and CLI binaries..."
@@ -25,7 +27,7 @@ pushd "${SERVICE_DIR}" >/dev/null
 go mod tidy
 go run ./cmd/mach1signregistry --check --catalog "${REPO_ROOT}/packages/registry-index/index.json"
 for cmd in mach1 mach1ctl mach1e2e stubmcp mcpapiserver; do
-  go build -trimpath -ldflags "-s -w" -o "${OUT_DIR}/${cmd}" "./cmd/${cmd}"
+  go build -trimpath -ldflags "-s -w -X github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/version.Version=${VERSION}" -o "${OUT_DIR}/${cmd}" "./cmd/${cmd}"
 done
 go vet ./...
 go test ./...

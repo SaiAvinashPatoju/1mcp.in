@@ -690,11 +690,12 @@ fn toggle_skill(state: State<AppState>, id: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn get_router_status(state: State<AppState>) -> Result<RouterStatus, String> {
+fn get_router_status(app: tauri::AppHandle, state: State<AppState>) -> Result<RouterStatus, String> {
     let running = state.daemon.is_running();
+    let version = format!("v{}", app.package_info().version);
     Ok(RouterStatus {
         status: if running { "running".to_string() } else { "stopped".to_string() },
-        version: "v1.0.0".to_string(),
+        version,
         transport: "http".to_string(),
         uptime_seconds: state.daemon.uptime_seconds(),
         port: state.daemon.base_url().split(':').last().and_then(|p| p.parse().ok()).unwrap_or(3200),
@@ -740,9 +741,9 @@ fn get_system_usage() -> Result<SystemUsage, String> {
         cpu_percent,
         memory_percent,
         disk_percent,
-        cpu_history: vec![cpu_percent * 0.8, cpu_percent * 0.9, cpu_percent],
-        memory_history: vec![memory_percent * 0.9, memory_percent],
-        disk_history: vec![disk_percent; 3],
+        cpu_history: vec![],
+        memory_history: vec![],
+        disk_history: vec![],
     })
 }
 
@@ -759,27 +760,7 @@ struct ActivityItemResponse {
 fn get_activity_log(state: State<AppState>, limit: Option<u32>) -> Result<Vec<ActivityItemResponse>, String> {
     let limit = limit.unwrap_or(20) as i64;
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    let mut items = db.get_activity_log(limit)?;
-    // Seed with demo data if empty
-    if items.is_empty() {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
-        let seed = vec![
-            db::ActivityItem { id: "1".to_string(), activity_type: "router_started".to_string(), message: "Mach1 Router started".to_string(), timestamp: now - 120, icon: "play".to_string() },
-            db::ActivityItem { id: "2".to_string(), activity_type: "client_connected".to_string(), message: "VS Code connected".to_string(), timestamp: now - 300, icon: "link".to_string() },
-            db::ActivityItem { id: "3".to_string(), activity_type: "mcp_started".to_string(), message: "GitHub MCP started".to_string(), timestamp: now - 1080, icon: "box".to_string() },
-            db::ActivityItem { id: "4".to_string(), activity_type: "mcp_stopped".to_string(), message: "GitHub MCP stopped (idle)".to_string(), timestamp: now - 2100, icon: "pause".to_string() },
-            db::ActivityItem { id: "5".to_string(), activity_type: "user_registered".to_string(), message: "New user registered: user@example.com".to_string(), timestamp: now - 3600, icon: "user".to_string() },
-        ];
-        // Suppress unused warning if seed is not used
-        let _ = &seed;
-        for item in &seed {
-            let _ = db.add_activity(item);
-        }
-        items = seed;
-    }
+    let items = db.get_activity_log(limit)?;
     Ok(items.into_iter().map(|item| ActivityItemResponse {
         id: item.id,
         activity_type: item.activity_type,
@@ -797,21 +778,6 @@ fn get_mcp_servers(state: State<AppState>) -> Result<Vec<McpServerDetail>, Strin
         let status = if mcp.enabled { "running" } else { "sleeping" };
         let lifecycle = if mcp.id == "mach1" { "Manual" } else { "Auto (lazy)" };
         let trust = if mcp.id == "mach1" { "internal" } else { "1mcp-verified" };
-        let tools_count = match mcp.id.as_str() {
-            "github" => 28,
-            "postgres" => 6,
-            "fetch" => 2,
-            "memory" => 6,
-            "filesystem" => 8,
-            "git" => 8,
-            "slack" => 12,
-            "jira" => 5,
-            "linear" => 10,
-            "brave-search" => 2,
-            "sequential-thinking" => 1,
-            "mach1" => 5,
-            _ => 3,
-        };
         McpServerDetail {
             id: mcp.id.clone(),
             name: mcp.name,
@@ -822,7 +788,7 @@ fn get_mcp_servers(state: State<AppState>) -> Result<Vec<McpServerDetail>, Strin
             trust: trust.to_string(),
             last_used_at: None,
             installed_at: format!("{}", mcp.installed_at),
-            tools_count,
+            tools_count: 0,
         }
     }).collect();
     Ok(servers)
@@ -840,18 +806,22 @@ async fn execute_command(command: String) -> Result<CommandResult, String> {
         });
     }
 
-    // Simulate output for common commands
-    let output = if command == "mach1ctl status" {
-        "5 servers installed, 1 running".to_string()
-    } else if command.starts_with("mach1ctl connect") {
-        "Client connected successfully".to_string()
-    } else if command.starts_with("mach1ctl install") {
-        "MCP installed successfully".to_string()
-    } else {
-        format!("Executed: {}", command)
-    };
+    // Execute the command and capture output
+    let output = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&command)
+        .output();
 
-    Ok(CommandResult { output, error: "".to_string() })
+    match output {
+        Ok(out) => Ok(CommandResult {
+            output: String::from_utf8_lossy(&out.stdout).to_string(),
+            error: String::from_utf8_lossy(&out.stderr).to_string(),
+        }),
+        Err(e) => Ok(CommandResult {
+            output: "".to_string(),
+            error: format!("Failed to execute command: {}", e),
+        }),
+    }
 }
 
 #[tauri::command]
@@ -941,37 +911,15 @@ fn get_server_detail(state: State<AppState>, id: String) -> Result<ServerDetail,
             version: mcp.version,
             runtime: mcp.runtime,
             status: if enabled { "running".to_string() } else { "sleeping".to_string() },
-            status_detail: if enabled { Some("PID 21340".to_string()) } else { Some("Idle".to_string()) },
+            status_detail: if enabled { Some("Active".to_string()) } else { Some("Idle".to_string()) },
             trust: if mcp.id == "mach1" { "internal".to_string() } else { "1mcp-verified".to_string() },
-            author: if mcp.id == "mach1" { "1mcp.in".to_string() } else { "Anthropic".to_string() },
+            author: if mcp.id == "mach1" { "1mcp.in".to_string() } else { "community".to_string() },
             lifecycle: if mcp.id == "mach1" { "Manual".to_string() } else { "Auto (lazy)".to_string() },
-            idle_timeout: if mcp.id == "mach1" { None } else { Some("15 minutes".to_string()) },
+            idle_timeout: if mcp.id == "mach1" { None } else { Some("60 seconds".to_string()) },
             last_used_at: None,
             last_used_by: None,
-            process: if enabled {
-                Some(ServerProcessInfo {
-                    pid: Some(21340),
-                    memory_mb: 64.2,
-                    cpu_percent: 0.3,
-                    uptime_seconds: 8640,
-                    restarts: 0,
-                })
-            } else {
-                None
-            },
-            tools_count: match mcp.id.as_str() {
-                "github" => 28,
-                "postgres" => 3,
-                "fetch" => 2,
-                "memory" => 6,
-                "filesystem" => 12,
-                "git" => 10,
-                "slack" => 12,
-                "jira" => 5,
-                "linear" => 10,
-                "brave-search" => 2,
-                _ => 3,
-            },
+            process: None,
+            tools_count: 0,
             installed_at,
         })
     } else {
@@ -1169,14 +1117,7 @@ fn get_server_tools(state: State<AppState>, id: String) -> Result<Vec<ServerTool
 
 #[tauri::command]
 fn get_server_logs(_state: State<AppState>, _id: String, _limit: Option<u32>) -> Result<Vec<ServerLogEntry>, String> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    Ok(vec![
-        ServerLogEntry { timestamp: format!("{}", now), level: "info".to_string(), message: "Server initialized".to_string() },
-        ServerLogEntry { timestamp: format!("{}", now - 120), level: "info".to_string(), message: "Tools registered".to_string() },
-    ])
+    Ok(vec![])
 }
 
 #[tauri::command]
@@ -1209,13 +1150,17 @@ fn get_server_config(state: State<AppState>, id: String) -> Result<ServerConfig,
 }
 
 #[tauri::command]
-fn scan_server(_state: State<AppState>, _id: String) -> Result<String, String> {
-    Ok("Scan completed".to_string())
+fn scan_server(_state: State<AppState>, id: String) -> Result<String, String> {
+    Ok(format!("Scan requested for {}", id))
 }
 
 #[tauri::command]
-fn restart_single_server(_state: State<AppState>, _id: String) -> Result<String, String> {
-    Ok("Restart requested".to_string())
+fn restart_single_server(state: State<AppState>, id: String) -> Result<String, String> {
+    // Stop and restart the router to force re-discovery of the MCP
+    let _ = state.daemon.stop();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    state.daemon.start(DAEMON_PORT)?;
+    Ok(format!("Restarted router (MCP {} will lazy-start on next call)", id))
 }
 
 #[tauri::command]
@@ -1378,20 +1323,20 @@ fn get_client_detail(app: tauri::AppHandle, id: String) -> Result<ClientConnecti
         name: name.to_string(),
         subtitle: subtitle.to_string(),
         status: if connected { "connected".to_string() } else { "not_connected".to_string() },
-        transport: if id == "claude" || id == "claudecode" { "file".to_string() } else { "stdio".to_string() },
+        transport: if id == "claude" || id == "claudecode" { "file".to_string() } else { "http".to_string() },
         config_path: config_path.unwrap_or_else(|| "—".to_string()),
-        last_handshake: if connected { "2m ago".to_string() } else { "—".to_string() },
+        last_handshake: "—".to_string(),
         router_binding: "mach1 (local)".to_string(),
-        process_id: if connected { "12874".to_string() } else { "—".to_string() },
+        process_id: "—".to_string(),
     })
 }
 
 #[tauri::command]
 fn get_client_routing_health(_id: String) -> Result<ClientRoutingHealthResponse, String> {
     Ok(ClientRoutingHealthResponse {
-        requests: 42,
-        active_tools: vec!["github".to_string(), "postgres".to_string()],
-        latency_avg_ms: 12,
+        requests: 0,
+        active_tools: vec![],
+        latency_avg_ms: 0,
         errors: 0,
         period: "Last 5 minutes".to_string(),
     })
@@ -1479,15 +1424,17 @@ fn save_settings(prefs: AppPreferences) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn get_system_info() -> Result<SystemInfoResponse, String> {
+fn get_system_info(app: tauri::AppHandle) -> Result<SystemInfoResponse, String> {
+    let version = format!("v{}", app.package_info().version);
+    let root_dir = mach1_root_dir(&app).map_err(|e| e.to_string())?;
     Ok(SystemInfoResponse {
         platform: format!("{}_{}", std::env::consts::OS, std::env::consts::ARCH),
-        version: "v1.0.0".to_string(),
+        version,
         router_status: "running".to_string(),
-        transport: "stdio".to_string(),
-        uptime_seconds: 8640,
+        transport: "http".to_string(),
+        uptime_seconds: 0,
         metrics_endpoint: "127.0.0.1:3031/metrics".to_string(),
-        data_directory: home_dir().join(".1mcp").to_string_lossy().to_string(),
+        data_directory: root_dir.to_string_lossy().to_string(),
     })
 }
 
@@ -1504,13 +1451,13 @@ fn clear_local_data(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn copy_diagnostics(_app: tauri::AppHandle, state: State<AppState>) -> Result<String, String> {
+fn copy_diagnostics(app: tauri::AppHandle, state: State<AppState>) -> Result<String, String> {
     use sysinfo::System;
     let sys = System::new_all();
     let platform = format!("{}_{}", std::env::consts::OS, std::env::consts::ARCH);
-    let version = "v1.0.0".to_string();
+    let version = format!("v{}", app.package_info().version);
     let router_status = if state.daemon.is_running() { "running" } else { "stopped" }.to_string();
-    let transport = "stdio".to_string();
+    let transport = "http".to_string();
     let uptime = format!("{}s", state.daemon.uptime_seconds());
     let cpu = sys.global_cpu_info().cpu_usage() as f64;
     let memory = sys.used_memory() as f64 / sys.total_memory() as f64 * 100.0;
@@ -1525,8 +1472,6 @@ fn copy_diagnostics(_app: tauri::AppHandle, state: State<AppState>) -> Result<St
         "cpu_percent": cpu,
         "memory_percent": memory,
         "log_level": log_level,
-        "installed_mcps": 0usize,
-        "connected_clients": 0usize,
     });
     Ok(diag.to_string())
 }

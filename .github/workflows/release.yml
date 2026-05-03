@@ -24,6 +24,7 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item "../../packages/registry-index/index.json" "cmd/mcpapiserver/registry-index.json" -Force
+          Copy-Item "../../packages/registry-index/index.json" "cmd/mach1/catalog.json" -Force
           if (-not (Test-Path "cmd/mcpapiserver/skills.json")) { Set-Content "cmd/mcpapiserver/skills.json" "[]" }
       - run: go test -race -timeout 60s ./...
 
@@ -92,13 +93,17 @@ jobs:
           $stageDir = Join-Path $distDir "stage-${{ matrix.goos }}-${{ matrix.goarch }}"
           if (Test-Path $stageDir) { Remove-Item -Recurse -Force $stageDir }
           New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
+          # Sync embedded catalog
+          Copy-Item "../../packages/registry-index/index.json" "cmd/mach1/catalog.json" -Force
           $env:GOOS = "${{ matrix.goos }}"
           $env:GOARCH = "${{ matrix.goarch }}"
           $env:CGO_ENABLED = "0"
+          $version = "${{ github.ref_name }}"
+          $ldflags = "-s -w -X github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/version.Version=$version"
           $routerName = if ($env:GOOS -eq "windows") { "mach1.exe" } else { "mach1" }
           $ctlName = if ($env:GOOS -eq "windows") { "mach1ctl.exe" } else { "mach1ctl" }
-          go build -trimpath -ldflags "-s -w" -o (Join-Path $stageDir $routerName) ./cmd/mach1
-          go build -trimpath -ldflags "-s -w" -o (Join-Path $stageDir $ctlName) ./cmd/mach1ctl
+          go build -trimpath -ldflags $ldflags -o (Join-Path $stageDir $routerName) ./cmd/mach1
+          go build -trimpath -ldflags $ldflags -o (Join-Path $stageDir $ctlName) ./cmd/mach1ctl
           $assetPath = Join-Path $distDir "${{ matrix.asset_name }}"
           if (Test-Path $assetPath) { Remove-Item -Force $assetPath }
           if ("${{ matrix.archive }}" -eq "zip") {
@@ -156,15 +161,21 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust_target }}
-      - name: Build bundled mach1
+      - name: Build bundled mach1 + mach1ctl
         shell: pwsh
         working-directory: services/mach1
         run: |
           New-Item -ItemType Directory -Force -Path ../../bin | Out-Null
+          # Sync embedded catalog
+          Copy-Item "../../packages/registry-index/index.json" "cmd/mach1/catalog.json" -Force
           $env:GOOS = "${{ matrix.goos }}"
           $env:GOARCH = "${{ matrix.goarch }}"
           $env:CGO_ENABLED = "0"
-          go build -trimpath -ldflags "-s -w" -o "../../bin/${{ matrix.router_name }}" ./cmd/mach1
+          $version = "${{ github.ref_name }}"
+          $ldflags = "-s -w -X github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/version.Version=$version"
+          $ctlName = if ("${{ matrix.goos }}" -eq "windows") { "mach1ctl.exe" } else { "mach1ctl" }
+          go build -trimpath -ldflags $ldflags -o "../../bin/${{ matrix.router_name }}" ./cmd/mach1
+          go build -trimpath -ldflags $ldflags -o "../../bin/$ctlName" ./cmd/mach1ctl
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:

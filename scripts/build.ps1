@@ -17,6 +17,15 @@ if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
     throw "Go toolchain not found in PATH. Install Go 1.22+ and re-run."
 }
 
+$env:CGO_ENABLED = "0"
+
+# Derive version from latest git tag, or "dev" if not in a git repo.
+$Version = "dev"
+try {
+    $tag = git describe --tags --abbrev=0 2>$null
+    if ($tag) { $Version = $tag }
+} catch {}
+
 Push-Location $serviceDir
 try {
     # Keep cmd/mcpapiserver/registry-index.json in sync with packages/registry-index/index.json
@@ -26,6 +35,12 @@ try {
         New-Item -ItemType Directory -Force -Path (Split-Path $registryDest) | Out-Null
         Copy-Item -Path $registrySrc -Destination $registryDest -Force
         Write-Host "Synced registry-index -> $registryDest"
+    }
+    # Keep cmd/mach1/catalog.json in sync (embedded fallback for release builds)
+    $catalogDest = Join-Path $serviceDir "cmd\mach1\catalog.json"
+    if (Test-Path $registrySrc) {
+        Copy-Item -Path $registrySrc -Destination $catalogDest -Force
+        Write-Host "Synced catalog -> $catalogDest"
     }
     $skillsDest = Join-Path $serviceDir "cmd\mcpapiserver\skills.json"
     if (-not (Test-Path $skillsDest)) {
@@ -45,7 +60,7 @@ try {
     foreach ($c in $cmds) {
         $out = Join-Path $OutDir "$c.exe"
         Write-Host "go build -> $out"
-        go build -trimpath -ldflags "-s -w" -o $out ".\cmd\$c"
+        go build -trimpath -ldflags "-s -w -X github.com/SaiAvinashPatoju/1mcp.in/services/mach1/internal/version.Version=$Version" -o $out ".\cmd\$c"
         if ($LASTEXITCODE -ne 0) { throw "build $c failed" }
     }
 

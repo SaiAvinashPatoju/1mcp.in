@@ -148,6 +148,9 @@ func runStart(args []string) error {
 		return err
 	}
 	cmdArgs := []string{"--db", dbPath, "--transport", transport}
+	if catPath := pickCatalogFlag(nil); catPath != "" {
+		cmdArgs = append(cmdArgs, "--catalog", catPath)
+	}
 	if transport == "http" {
 		cmdArgs = append(cmdArgs, "--listen", listen)
 	}

@@ -18,6 +18,11 @@ func Load(path string) ([]manifest.Manifest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read catalog: %w", err)
 	}
+	return LoadBytes(b)
+}
+
+// LoadBytes parses and validates a catalog from a JSON byte slice.
+func LoadBytes(b []byte) ([]manifest.Manifest, error) {
 	var raw []json.RawMessage
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return nil, fmt.Errorf("parse catalog (expected JSON array): %w", err)
